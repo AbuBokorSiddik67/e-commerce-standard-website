@@ -1,3 +1,4 @@
+import { catalogDisplay } from "@/server/services/catalog-display";
 import { catalogAvailability } from "@/lib/product-availability";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
@@ -58,7 +59,7 @@ export default async function ProductDetailPage({
         variants: { where: { isActive: true } },
         categories: true,
         reviews: { where: { isApproved: true }, orderBy: { createdAt: "desc" } },
-        _count: { select: { reviews: true, variants: true } },
+        _count: { select: { reviews: { where: { isApproved: true } }, variants: true } },
       },
     }),
   );
@@ -82,6 +83,7 @@ export default async function ProductDetailPage({
     ),
   ]);
   const related = relatedResult.ok ? relatedResult.value : [];
+  const display = await catalogDisplay([product.id, ...related.map(p => p.id)]);
 
   const base = (
     process.env.NEXT_PUBLIC_APP_URL ??
@@ -162,12 +164,13 @@ export default async function ProductDetailPage({
           })),
           reviewCount: product._count.reviews,
         }}
-        settings={settings}
+        settings={{ currencySymbol: settings.currencySymbol }}
+        initialWishlisted={display.wishlist.has(product.id)}
       />
 
       {related.length > 0 && (
         <section className="mt-12">
-          <h2 className="mb-6 text-xl font-bold">Related Products</h2>
+          <h2 className="mb-6 section-title">Related products</h2>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             {related.map((p) => (
               <ProductCard
@@ -179,8 +182,10 @@ export default async function ProductDetailPage({
                   ...catalogAvailability(p),
                   compareAtPrice: p.compareAtPrice?.toString() ?? null,
                   images: p.images,
-                                    isActive: p.isActive,
+                  isActive: p.isActive,
+                  rating: display.ratings.get(p.id),
                 }}
+                initialWishlisted={display.wishlist.has(p.id)}
                 currencySymbol={settings.currencySymbol}
               />
             ))}

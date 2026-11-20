@@ -7,7 +7,7 @@ import { useCartStore } from "@/hooks/use-cart";
 import { formatCurrency } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ShoppingCart, Heart } from "lucide-react";
+import { ShoppingBag, Heart, ArrowUpRight, Star } from "lucide-react";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toggleWishlistAction } from "@/server/actions/account";
@@ -22,7 +22,7 @@ type ProductCardData = {
   stock: number;
   requiresVariant: boolean;
   isActive: boolean;
-  isNew?: boolean;
+  rating?: { average: number; count: number };
 };
 
 export function ProductCard({
@@ -42,6 +42,7 @@ export function ProductCard({
   const router = useRouter();
   const [adding, setAdding] = useState(false);
   const [wishlisted, setWishlisted] = useState(initialWishlisted);
+  const [saving, setSaving] = useState(false);
 
   const price = Number(product.price);
   const compareAt = product.compareAtPrice ? Number(product.compareAtPrice) : null;
@@ -68,69 +69,42 @@ export function ProductCard({
     setTimeout(() => setAdding(false), 500);
   }
 
-  async function toggleWishlist(e: React.MouseEvent) {
-    e.preventDefault();
-    e.stopPropagation();
-    const result = await toggleWishlistAction(product.id);
-    if (!result.success) {
-      toast.error(result.error ?? "Could not update wishlist");
-      return;
-    }
-    setWishlisted(Boolean(result.wishlisted));
-    toast.success(result.wishlisted ? "Added to wishlist" : "Removed from wishlist");
-    if (refreshOnWishlist) router.refresh();
+  async function toggleWishlist() {
+    setSaving(true);
+    try {
+      const result = await toggleWishlistAction(product.id);
+      if (!result.success) { toast.error(result.error ?? "Could not update wishlist"); return; }
+      setWishlisted(Boolean(result.wishlisted));
+      toast.success(result.wishlisted ? "Added to wishlist" : "Removed from wishlist");
+      if (refreshOnWishlist) router.refresh();
+    } catch {
+      toast.error("Could not update wishlist");
+    } finally { setSaving(false); }
   }
 
-  return (
-    <Link href={`/product/${product.slug}`} className="group flex flex-col overflow-hidden rounded-lg border bg-card transition-shadow hover:shadow-md">
-      <div className="relative aspect-square overflow-hidden bg-muted">
-        {image ? (
-          <Image
-            src={image}
-            alt={product.name}
-            fill
-            sizes="(max-width: 768px) 50vw, 25vw"
-            className="object-cover transition-transform duration-300 group-hover:scale-105"
-          />
-        ) : (
-          <div className="flex h-full items-center justify-center text-muted-foreground">
-            <ShoppingCart className="h-8 w-8" />
-          </div>
-        )}
-        <div className="absolute left-2 top-2 flex flex-col gap-1">
-          {discount > 0 && <Badge variant="destructive">-{discount}%</Badge>}
-          {isNew && <Badge>New</Badge>}
-          {outOfStock && <Badge variant="secondary">Out of stock</Badge>}
-        </div>
-        <button
-          type="button"
-          onClick={toggleWishlist}
-          aria-label={wishlisted ? "Remove from wishlist" : "Add to wishlist"}
-          className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-background/90 shadow-sm transition-colors hover:bg-background"
-        >
-          <Heart className={`h-4 w-4 ${wishlisted ? "fill-red-500 text-red-500" : ""}`} />
-        </button>
-      </div>
-
-      <div className="flex flex-1 flex-col p-3">
-        <h3 className="line-clamp-2 text-sm font-medium leading-snug">{product.name}</h3>
-        <div className="mt-1 flex items-baseline gap-2">
-          <span className="font-semibold">{product.requiresVariant ? "From " : ""}{formatCurrency(price, currencySymbol)}</span>
-          {compareAt && compareAt > price && (
-            <span className="text-xs text-muted-foreground line-through">{formatCurrency(compareAt, currencySymbol)}</span>
-          )}
-        </div>
-        <div className="mt-auto pt-3">
-          <Button
-            size="sm"
-            className="w-full"
-            onClick={addToCart}
-            disabled={outOfStock || adding}
-          >
-            <ShoppingCart className="h-4 w-4" /> {adding ? "Added!" : product.requiresVariant ? "Choose variant" : "Add to Cart"}
-          </Button>
-        </div>
+  return <article className="surface group relative flex min-w-0 flex-col transition-colors hover:border-primary/40">
+    <Link className="relative block aspect-[1.16] overflow-hidden rounded-t-2xl bg-[#e8edf5]" href={`/product/${product.slug}`} aria-label={`View ${product.name}`}>
+      {image ? <Image src={image} alt="" fill sizes="(max-width: 639px) 47vw, (max-width: 1023px) 31vw, 24vw" className="object-cover transition-transform duration-300 group-hover:scale-[1.035]" />
+        : <div className="grid h-full place-items-center text-muted-foreground"><ShoppingBag className="size-7" aria-hidden="true" /></div>}
+      <div className="absolute left-2 top-2 flex max-w-[calc(100%-3rem)] flex-wrap gap-1 sm:left-3 sm:top-3">
+        {discount > 0 && <Badge className="border-transparent bg-[#fde6e2] text-[#8a261a] hover:bg-[#fde6e2]">−{discount}%</Badge>}
+        {isNew && <Badge className="border-transparent bg-white text-[#244eab] hover:bg-white">New</Badge>}
+        {outOfStock && <Badge variant="secondary">Out of stock</Badge>}
       </div>
     </Link>
-  );
+    <button type="button" onClick={toggleWishlist} aria-pressed={wishlisted} disabled={saving} aria-label={`Wishlist: ${product.name}`} className="absolute right-2 top-2 grid size-9 place-items-center rounded-full border border-white/60 bg-white text-[#25334e] shadow-sm hover:bg-[#eaf0fd] sm:right-3 sm:top-3">
+      <Heart className={`size-4 ${wishlisted ? 'fill-rose-600 text-rose-600' : ''}`} aria-hidden="true" />
+    </button>
+    <div className="flex flex-1 flex-col p-3 sm:p-4">
+      <h3 className="text-sm font-bold leading-snug"><Link href={`/product/${product.slug}`} className="hover:underline">{product.name}</Link></h3>
+      {product.rating && product.rating.count > 0 && <p className="mt-1.5 flex items-center gap-1 text-xs font-medium text-muted-foreground" aria-label={`${product.rating.average.toFixed(1)} out of 5, ${product.rating.count} approved reviews`}><Star className="size-3 fill-amber-500 text-amber-700" aria-hidden="true" /> {product.rating.average.toFixed(1)} ({product.rating.count})</p>}
+      <div className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1 tabular-nums">
+        <span className="text-sm font-extrabold sm:text-base">{product.requiresVariant ? 'From ' : ''}{formatCurrency(price, currencySymbol)}</span>
+        {compareAt && compareAt > price && <del className="text-xs text-muted-foreground">{formatCurrency(compareAt, currencySymbol)}</del>}
+      </div>
+      <div className="mt-auto pt-3"><Button variant="outline" size="sm" className="w-full px-1.5 text-[0.7rem] sm:text-xs" onClick={addToCart} disabled={outOfStock || adding}>
+        {product.requiresVariant ? <ArrowUpRight className="size-3.5 shrink-0" aria-hidden="true" /> : <ShoppingBag className="size-3.5 shrink-0" aria-hidden="true" />} {outOfStock ? 'Unavailable' : adding ? 'Added' : product.requiresVariant ? 'Choose variant' : 'Add to cart'}
+      </Button></div>
+    </div>
+  </article>;
 }

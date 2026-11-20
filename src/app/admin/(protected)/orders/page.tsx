@@ -1,3 +1,4 @@
+import { Pagination } from "@/components/shared/pagination";
 import Link from "next/link";
 import { requireAdmin } from "@/lib/auth-guard";
 import { listOrders } from "@/server/services/order.service";
@@ -53,7 +54,7 @@ export default async function AdminOrdersPage({
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">Orders</h1>
+        <h1 className="page-title">Orders</h1>
         <p className="text-sm text-muted-foreground">{total} orders</p>
       </div>
 
@@ -68,20 +69,20 @@ export default async function AdminOrdersPage({
         ))}
       </div>
 
-      <form className="flex gap-2">
+      <form role="search" className="flex flex-wrap gap-2">
         {params.status && <input type="hidden" name="status" value={params.status} />}
-        <div className="relative max-w-sm flex-1">
+        <div className="relative min-w-0 max-w-sm flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input name="search" placeholder="Order number, phone, or name" defaultValue={params.search} className="pl-9" />
+          <Input type="search" aria-label="Search orders" name="search" placeholder="Order number, phone, or name" defaultValue={params.search} className="pl-9" />
         </div>
         <Button type="submit" variant="outline">Search</Button>
       </form>
 
       <Card>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto" role="region" aria-label="Orders table" tabIndex={0}>
             <table className="w-full text-sm">
-              <thead>
+              <thead className="bg-muted/60">
                 <tr className="border-b text-left text-muted-foreground">
                   <th className="p-4 font-medium">Order</th>
                   <th className="p-4 font-medium">Customer</th>
@@ -128,15 +129,7 @@ export default async function AdminOrdersPage({
         </CardContent>
       </Card>
 
-      {pages > 1 && (
-        <div className="flex justify-center gap-2">
-          {Array.from({ length: Math.min(pages, 10) }, (_, i) => i + 1).map((n) => (
-            <Link key={n} href={`/admin/orders?page=${n}${params.status ? `&status=${params.status}` : ""}${params.search ? `&search=${params.search}` : ""}`}>
-              <Button variant={n === page ? "default" : "outline"} size="sm">{n}</Button>
-            </Link>
-          ))}
-        </div>
-      )}
+      <Pagination page={page} pages={pages} base="/admin/orders" query={params} label="Orders pages" />
     </div>
   );
 }

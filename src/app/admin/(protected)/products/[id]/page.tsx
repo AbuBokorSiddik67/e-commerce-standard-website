@@ -41,7 +41,7 @@ export default async function EditProductPage({ params }: { params: Promise<{ id
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Edit Product</h1>
+      <h1 className="page-title">Edit Product</h1>
       <ProductForm product={safeProduct} categories={categories.map((c) => ({ id: c.id, name: c.name }))} />
     </div>
   );

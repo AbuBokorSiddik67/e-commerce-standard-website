@@ -45,9 +45,9 @@ export function CategoryManager({ categories }: { categories: Category[] }) {
 
       <Card>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto" role="region" aria-label="Categories table" tabIndex={0}>
             <table className="w-full text-sm">
-              <thead>
+              <thead className="bg-muted/60">
                 <tr className="border-b text-left text-muted-foreground">
                   <th className="p-4 font-medium">Name</th>
                   <th className="p-4 font-medium">Slug</th>

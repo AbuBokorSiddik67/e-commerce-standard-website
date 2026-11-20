@@ -62,3 +62,12 @@ test("password recovery requires an explicit delivery configuration and canonica
   assert.equal(resetMailConfig({NODE_ENV:"production",AUTH_URL:"http://localhost:3000",RESEND_API_KEY:"synthetic",PASSWORD_RESET_FROM:"sender@example.test"}),null);
   assert.equal(resetMailConfig({NODE_ENV:"production",AUTH_URL:"https://shop.example.test",RESEND_API_KEY:"synthetic",PASSWORD_RESET_FROM:"sender@example.test"})?.origin,"https://shop.example.test");
 });
+
+
+test("checked-in product media can be retained on edit without opening arbitrary paths", () => {
+  const product = "/uploads/products/premium-leather-notebook-a5.jpg";
+  assert.equal(safeImageUrl(product), product);
+  for (const path of ["/uploads/products/../item.jpg", "/uploads/products/%2e%2e/item.jpg", "/uploads/products/child/item.jpg", "/uploads/other/item.jpg", "/uploads/products/item.svg", "/uploads/products/item.jpg?x=1"]) {
+    assert.equal(safeImageUrl(path), null);
+  }
+});

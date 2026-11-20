@@ -51,6 +51,7 @@ export const ADMIN_NAV = [
   { href: "/admin/customers", label: "Customers", icon: "Users" },
   { href: "/admin/banners", label: "Banners", icon: "ImageIcon" },
   { href: "/admin/coupons", label: "Coupons", icon: "Ticket" },
+  { href: "/admin/reviews", label: "Reviews", icon: "Star" },
   { href: "/admin/homepage", label: "Homepage", icon: "LayoutTemplate" },
   { href: "/admin/settings", label: "Settings", icon: "Settings" },
   { href: "/admin/reports", label: "Reports", icon: "BarChart3" },

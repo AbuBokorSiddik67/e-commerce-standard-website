@@ -27,7 +27,7 @@ export default async function AdminSettingsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">Store Settings</h1>
+        <h1 className="page-title">Store Settings</h1>
         <p className="text-sm text-muted-foreground">
           Branding, contact info, policies, and delivery charges — applied across the storefront
         </p>

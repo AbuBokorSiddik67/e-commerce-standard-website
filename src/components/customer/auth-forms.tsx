@@ -27,8 +27,8 @@ function FormShell({
 }) {
   return (
     <div className="container-page flex min-h-[60vh] items-center justify-center py-12">
-      <div className="w-full max-w-md rounded-xl border bg-card p-6 shadow-sm sm:p-8">
-        <h1 className="text-2xl font-bold">{title}</h1>
+      <div className="surface w-full max-w-md border-t-4 border-t-primary p-5 sm:p-8">
+        <p className="eyebrow mb-2 text-primary">Customer account</p><h1 className="page-title">{title}</h1>
         <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
         <div className="mt-6">{children}</div>
         {footer && <div className="mt-4 text-center text-sm text-muted-foreground">{footer}</div>}
@@ -37,13 +37,19 @@ function FormShell({
   );
 }
 
+function FormError({ children }: { children: string }) {
+  return children ? <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm font-medium text-[#941f1f]">{children}</p> : null;
+}
+
 export function LoginForm() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
+    setError("");
     setLoading(true);
     try {
       const result = await signIn("credentials", {
@@ -52,14 +58,14 @@ export function LoginForm() {
         redirect: false,
       });
       if (!result?.ok || result.error) {
-        toast.error("Invalid email or password");
+        setError("Invalid email or password");
         return;
       }
       toast.success("Welcome back!");
       router.push("/account");
       router.refresh();
     } catch {
-      toast.error("We couldn't sign you in right now. Please try again.");
+      setError("We couldn't sign you in right now. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -78,7 +84,8 @@ export function LoginForm() {
         </>
       }
     >
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-4" aria-busy={loading}>
+          <FormError>{error}</FormError>
         <div>
           <Label htmlFor="login-email">Email</Label>
           <Input id="login-email" name="email" type="email" autoComplete="email" required />
@@ -109,6 +116,7 @@ export function LoginForm() {
 export function RegisterForm() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -120,15 +128,16 @@ export function RegisterForm() {
       password: String(formData.get("password") ?? ""),
       confirmPassword: String(formData.get("confirmPassword") ?? ""),
     };
+    setError("");
     setLoading(true);
     try {
       const result = await registerAction(payload);
-      if (!result.success) { toast.error(result.error ?? "Could not create account"); return; }
+      if (!result.success) { setError(result.error ?? "Could not create account"); return; }
       const login = await signIn("credentials", { email: payload.email, password: payload.password, redirect: false }).catch(() => null);
       toast.success("Account created!");
       router.push(login?.ok && !login.error ? "/account" : "/login");
       router.refresh();
-    } catch { toast.error("Could not create account"); }
+    } catch { setError("Could not create account"); }
     finally { setLoading(false); }
   }
 
@@ -145,7 +154,8 @@ export function RegisterForm() {
         </>
       }
     >
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-4" aria-busy={loading}>
+          <FormError>{error}</FormError>
         <div>
           <Label htmlFor="register-name">Full name</Label>
           <Input id="register-name" name="name" autoComplete="name" required />
@@ -159,6 +169,7 @@ export function RegisterForm() {
           <Input
             id="register-phone"
             name="phone"
+            type="tel" inputMode="tel" maxLength={11} pattern="01[3-9][0-9]{8}"
             placeholder="01XXXXXXXXX"
             autoComplete="tel"
             required
@@ -196,17 +207,19 @@ export function RegisterForm() {
 
 export function ForgotPasswordForm() {
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const [sent, setSent] = useState(false);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
+    setError("");
     setLoading(true);
     try {
       const result = await requestPasswordResetAction({ email: String(formData.get("email") ?? "") });
-      if (!result.success) { toast.error(result.error ?? "Could not request a reset"); return; }
+      if (!result.success) { setError(result.error ?? "Could not request a reset"); return; }
       setSent(true);
-    } catch { toast.error("Could not request a reset. Try again shortly."); }
+    } catch { setError("Could not request a reset. Try again shortly."); }
     finally { setLoading(false); }
   }
 
@@ -221,14 +234,15 @@ export function ForgotPasswordForm() {
       }
     >
       {sent ? (
-        <div className="space-y-3 text-sm">
+        <div role="status" className="rounded-lg border border-[#cce4db] bg-[#eef8f3] p-3 text-sm">
           <p className="text-muted-foreground">
             If that email is eligible, you’ll receive password reset instructions.
           </p>
 
         </div>
       ) : (
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4" aria-busy={loading}>
+          <FormError>{error}</FormError>
           <div>
             <Label htmlFor="forgot-email">Email</Label>
             <Input id="forgot-email" name="email" type="email" autoComplete="email" required />
@@ -250,18 +264,20 @@ export function ResetPasswordForm() {
   }, []);
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
+    setError("");
     setLoading(true);
     try {
       const result = await resetPasswordAction({ token, password: String(formData.get("password") ?? ""), confirmPassword: String(formData.get("confirmPassword") ?? "") });
-      if (!result.success) { toast.error(result.error ?? "Could not reset password"); return; }
+      if (!result.success) { setError(result.error ?? "Could not reset password"); return; }
       window.history.replaceState(null, "", "/reset-password");
       toast.success("Password updated. Please sign in.");
       router.replace("/login");
-    } catch { toast.error("Could not reset password. Try again shortly."); }
+    } catch { setError("Could not reset password. Try again shortly."); }
     finally { setLoading(false); }
   }
 
@@ -278,7 +294,8 @@ export function ResetPasswordForm() {
 
   return (
     <FormShell title="Reset password" subtitle="Choose a new password for your account.">
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-4" aria-busy={loading}>
+          <FormError>{error}</FormError>
         <div>
           <Label htmlFor="reset-password">New password</Label>
           <Input

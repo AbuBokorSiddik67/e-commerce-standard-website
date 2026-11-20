@@ -23,7 +23,7 @@ export default async function AdminBannersPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">Banners</h1>
+        <h1 className="page-title">Banners</h1>
         <p className="text-sm text-muted-foreground">Promotional banners shown on the storefront</p>
       </div>
       <BannerManager banners={banners.map((b) => ({

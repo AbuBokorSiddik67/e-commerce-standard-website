@@ -7,6 +7,7 @@ import { updateOrderStatusAction, updatePaymentStatusAction, addOrderNoteAction 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Loader2, Printer } from "lucide-react";
 
 const NEXT_ACTIONS: Record<string, { status: string; label: string }[]> = {
@@ -64,14 +65,14 @@ export function OrderStatusControls({
       <div className="flex flex-wrap gap-2">
         {actions.map((a) =>
           a.status === "CANCELLED" ? (
-            <Button
-              key={a.status}
-              variant="destructive"
-              disabled={pending}
-              onClick={() => setCancelOpen(true)}
-            >
-              {a.label}
-            </Button>
+            <AlertDialog key={a.status} open={cancelOpen} onOpenChange={open => { if (!pending) setCancelOpen(open); }}>
+              <AlertDialogTrigger asChild><Button variant="destructive" disabled={pending}>{a.label}</Button></AlertDialogTrigger>
+              <AlertDialogContent className="max-w-[calc(100vw-2rem)] rounded-2xl sm:max-w-md">
+                <AlertDialogHeader><AlertDialogTitle>Cancel order?</AlertDialogTitle><AlertDialogDescription>Stock will be restored. This cannot be undone.</AlertDialogDescription></AlertDialogHeader>
+                <div className="space-y-1.5"><Label htmlFor="cancel-reason">Cancellation reason (optional)</Label><Textarea id="cancel-reason" value={cancelReason} onChange={e => setCancelReason(e.target.value)} rows={3} maxLength={500} /></div>
+                <AlertDialogFooter><AlertDialogCancel>Keep order</AlertDialogCancel><Button variant="destructive" disabled={pending} onClick={() => { setCancelOpen(false); changeStatus("CANCELLED", cancelReason); }}>Cancel order</Button></AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           ) : (
             <Button key={a.status} disabled={pending} onClick={() => changeStatus(a.status)}>
               {pending && <Loader2 className="h-4 w-4 animate-spin" />} {a.label}
@@ -102,25 +103,6 @@ export function OrderStatusControls({
         <Button variant="outline" size="sm" onClick={saveNote} disabled={pending}>Save Note</Button>
       </div>
 
-      {cancelOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setCancelOpen(false)}>
-          <div className="w-full max-w-md rounded-lg bg-card p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <h3 className="mb-2 font-semibold">Cancel Order</h3>
-            <p className="mb-3 text-sm text-muted-foreground">Stock will be restored. Add a reason (optional).</p>
-            <Textarea value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} rows={3} placeholder="Reason for cancellation" />
-            <div className="mt-4 flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setCancelOpen(false)}>Keep Order</Button>
-              <Button
-                variant="destructive"
-                disabled={pending}
-                onClick={() => { setCancelOpen(false); changeStatus("CANCELLED", cancelReason); }}
-              >
-                Cancel Order
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

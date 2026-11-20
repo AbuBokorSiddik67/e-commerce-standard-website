@@ -1,56 +1,30 @@
 import Image from "next/image";
 import Link from "next/link";
+import { ArrowUpRight, Shapes } from "lucide-react";
 import type { SafeHomepageSection } from "@/types/domain";
 import type { Category } from "@prisma/client";
 
-export function CategoryShowcase({
-  section, categories,
-}: {
+export function CategoryShowcase({ section, categories }: {
   section: SafeHomepageSection;
   categories: (Category & { _count?: { products: number } })[] | undefined;
 }) {
-  if (!categories || categories.length === 0) return null;
-
-  return (
-    <section className="container-page py-10">
-      {(section.title || section.subtitle) && (
-        <div className="mb-6 text-center">
-          {section.title && <h2 className="text-2xl font-bold">{section.title}</h2>}
-          {section.subtitle && <p className="mt-1 text-muted-foreground">{section.subtitle}</p>}
-        </div>
-      )}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-        {categories.map((cat) => (
-          <Link
-            key={cat.id}
-            href={`/products?category=${cat.slug}`}
-            className="group relative overflow-hidden rounded-lg border bg-card transition-shadow hover:shadow-md"
-          >
-            <div className="relative aspect-[4/3]">
-              {cat.image ? (
-                <Image
-                  src={cat.image}
-                  alt={cat.name}
-                  fill
-                  sizes="(max-width: 768px) 50vw, 25vw"
-                  className="object-cover transition-transform duration-300 group-hover:scale-105"
-                />
-              ) : (
-                <div className="flex h-full items-center justify-center bg-muted text-2xl font-bold text-muted-foreground">
-                  {cat.name.slice(0, 2).toUpperCase()}
-                </div>
-              )}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-              <div className="absolute bottom-3 left-3 right-3 text-white">
-                <p className="font-semibold">{cat.name}</p>
-                {cat._count && (
-                  <p className="text-xs text-white/70">{cat._count.products} products</p>
-                )}
-              </div>
-            </div>
-          </Link>
-        ))}
+  if (!categories?.length) return null;
+  return <section className="container-page py-8 lg:py-11">
+    <div className="mb-5 flex flex-wrap items-end justify-between gap-3 sm:mb-6">
+      <div><p className="eyebrow mb-2 text-primary">The collections</p>
+        {section.title && <h2 className="section-title">{section.title}</h2>}
+        {section.subtitle && <p className="mt-1.5 text-sm text-muted-foreground">{section.subtitle}</p>}
       </div>
-    </section>
-  );
+      <Link href="/products" className="inline-flex min-h-10 items-center gap-2 text-sm font-bold hover:text-primary hover:underline">Browse all <ArrowUpRight className="size-4" aria-hidden="true" /></Link>
+    </div>
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 lg:gap-4">
+      {categories.map(cat => <Link key={cat.id} href={`/products?category=${encodeURIComponent(cat.slug)}`} className="surface group flex items-center gap-2.5 p-3 transition-colors hover:border-primary/50 sm:gap-3.5 sm:p-4">
+        <span className="relative grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl bg-[#e8effd] text-[#244eab] sm:size-12">
+          {cat.image ? <Image src={cat.image} alt="" fill sizes="48px" className="object-cover" /> : <Shapes className="size-[1.15rem]" aria-hidden="true" />}
+        </span>
+        <span className="min-w-0 flex-1 text-xs font-bold text-foreground sm:text-sm">{cat.name}</span>
+        <ArrowUpRight className="hidden size-4 shrink-0 text-muted-foreground group-hover:text-primary sm:block" aria-hidden="true" />
+      </Link>)}
+    </div>
+  </section>;
 }

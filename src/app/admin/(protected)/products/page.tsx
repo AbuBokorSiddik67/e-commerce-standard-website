@@ -1,3 +1,4 @@
+import { Pagination } from "@/components/shared/pagination";
 import Link from "next/link";
 import { requireAdmin } from "@/lib/auth-guard";
 import { listProducts } from "@/server/repositories/product.repo";
@@ -39,7 +40,7 @@ export default async function AdminProductsPage({
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold">Products</h1>
+          <h1 className="page-title">Products</h1>
           <p className="text-sm text-muted-foreground">{total} products</p>
         </div>
         <Button asChild>
@@ -47,19 +48,19 @@ export default async function AdminProductsPage({
         </Button>
       </div>
 
-      <form className="flex gap-2">
-        <div className="relative flex-1 max-w-sm">
+      <form role="search" className="flex flex-wrap gap-2">
+        <div className="relative min-w-0 flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input name="search" placeholder="Search by name or SKU" defaultValue={params.search} className="pl-9" />
+          <Input type="search" aria-label="Search products" name="search" placeholder="Search by name or SKU" defaultValue={params.search} className="pl-9" />
         </div>
         <Button type="submit" variant="outline">Search</Button>
       </form>
 
       <Card>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto" role="region" aria-label="Products table" tabIndex={0}>
             <table className="w-full text-sm">
-              <thead>
+              <thead className="bg-muted/60">
                 <tr className="border-b text-left text-muted-foreground">
                   <th className="p-4 font-medium">Product</th>
                   <th className="p-4 font-medium">Price</th>
@@ -113,15 +114,7 @@ export default async function AdminProductsPage({
         </CardContent>
       </Card>
 
-      {pages > 1 && (
-        <div className="flex justify-center gap-2">
-          {Array.from({ length: pages }, (_, i) => i + 1).map((n) => (
-            <Link key={n} href={`/admin/products?page=${n}${params.search ? `&search=${params.search}` : ""}`}>
-              <Button variant={n === page ? "default" : "outline"} size="sm">{n}</Button>
-            </Link>
-          ))}
-        </div>
-      )}
+      <Pagination page={page} pages={pages} base="/admin/products" query={params} label="Products pages" />
     </div>
   );
 }

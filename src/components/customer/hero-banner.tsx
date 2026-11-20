@@ -2,7 +2,9 @@
 
 import { safeLink } from "@/lib/safe-urls";
 import { useEffect, useRef, useState } from 'react';
-import { getImageProps } from 'next/image';
+import Image, { getImageProps } from 'next/image';
+import { ArrowDown, ArrowRight, Pause, Play } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import type { SafeHomepageSection } from '@/types/domain';
 import type { Banner } from '@prisma/client';
@@ -184,11 +186,12 @@ export function HeroBanner({
   const [active, setActive] = useState(0);
   const [paused, setPaused] = useState(false);
   const [motionOk, setMotionOk] = useState(false);
+  const [stopped, setStopped] = useState(false);
   const touchStartX = useRef<number | null>(null);
 
   // Autoplay is driven by the progress bar's CSS animation (see onAnimationEnd
   // below), so the bar and the slide change always stay in sync.
-  const autoplay = count > 1 && motionOk;
+  const autoplay = count > 1 && motionOk && !stopped;
 
   // Use the taller phone shape only if EVERY slide has a phone banner, so the
   // box height never jumps between slides. Otherwise phones use the desktop shape.
@@ -203,7 +206,11 @@ export function HeroBanner({
   const prev = () => setActive((prev) => (prev - 1 + count) % count);
 
   useEffect(() => {
-    setMotionOk(!window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    const query = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const sync = () => setMotionOk(!query.matches);
+    sync();
+    query.addEventListener('change', sync);
+    return () => query.removeEventListener('change', sync);
   }, []);
 
   useEffect(() => {
@@ -225,6 +232,25 @@ export function HeroBanner({
     else prev();
   };
 
+  if (isPlaceholder) {
+    const secondaryHref = safeLink(settings.secondaryCtaLink);
+    const secondaryText = typeof settings.secondaryCtaText === 'string' && settings.secondaryCtaText.trim() ? settings.secondaryCtaText : null;
+    return <section className="container-page pt-4 sm:pt-6">
+      <div className="grid overflow-hidden rounded-[1.55rem] border border-[#d7e0f3] bg-[#eaf0fd] text-[#14213c] md:min-h-[26.25rem] md:grid-cols-[1fr_1.07fr]">
+        <div className="relative z-10 flex flex-col items-start justify-center px-6 py-9 sm:px-10 md:px-10 lg:px-14">
+          <p className="eyebrow mb-4 flex items-center gap-2.5 text-[#234aa1]"><span className="h-px w-6 bg-current" /> The everyday edit</p>
+          <h1 className="display-title">{section.title || 'Explore the store'}</h1>
+          {section.subtitle && <p className="mt-4 max-w-sm text-sm leading-relaxed text-[#425370] sm:text-base">{section.subtitle}</p>}
+          <div className="mt-7 flex flex-wrap items-center gap-x-4 gap-y-3">
+            <Button asChild size="lg"><Link href={fallbackHref}>{ctaLabel}<ArrowRight className="size-4" aria-hidden="true" /></Link></Button>
+            {secondaryHref && secondaryText ? <Button asChild variant="outline"><Link href={secondaryHref}>{secondaryText}</Link></Button> : <Link href="/products" className="inline-flex min-h-11 items-center gap-1.5 text-sm font-bold text-[#203d7b] hover:underline">Explore catalog <ArrowDown className="size-4" aria-hidden="true" /></Link>}
+          </div>
+        </div>
+        <div className="relative min-h-[13rem] md:min-h-full"><Image src="/brand/editorial-desk.webp" alt="" fill priority sizes="(min-width: 768px) 55vw, 100vw" className="object-cover" /></div>
+      </div>
+    </section>;
+  }
+
   return (
     <section
       className="w-full pt-4"
@@ -242,7 +268,8 @@ export function HeroBanner({
       </style>
 
       {/* Same side gaps as the other homepage sections (max-w-7xl + px-8 = 1216px) */}
-      <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
+      <div className="container-page">
+        <h1 className="sr-only">{section.title || "Featured promotions"}</h1>
         <div
           className={`relative w-full overflow-hidden rounded-2xl bg-muted ring-1 ring-black/5 ${boxShape} ${
             isPlaceholder ? 'min-h-[200px] md:min-h-0' : ''
@@ -290,7 +317,7 @@ export function HeroBanner({
           })}
 
           {count > 1 && (
-            <div className="absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full bg-black/30 px-3 py-2 backdrop-blur-sm">
+            <div className="absolute bottom-2 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1 rounded-full bg-black/70 px-2 py-1 text-white">
               {slides.map((item, index) => {
                 const isActive = index === active;
 
@@ -301,7 +328,7 @@ export function HeroBanner({
                     onClick={() => setActive(index)}
                     aria-label={`Go to slide ${index + 1}`}
                     aria-current={isActive ? 'true' : undefined}
-                    className={`relative h-2 overflow-hidden rounded-full transition-all duration-300 ${
+                    className={`relative h-6 min-w-6 overflow-hidden rounded-full border-4 border-black transition-colors ${
                       isActive
                         ? autoplay
                           ? 'w-9 bg-white/35'
@@ -322,6 +349,7 @@ export function HeroBanner({
                   </button>
                 );
               })}
+              {motionOk && <button type="button" className="grid size-7 place-items-center rounded-full hover:bg-white/20" aria-label={stopped ? 'Play slides' : 'Pause slides'} onClick={() => setStopped(!stopped)}>{stopped ? <Play className="size-3" /> : <Pause className="size-3" />}</button>}
             </div>
           )}
         </div>

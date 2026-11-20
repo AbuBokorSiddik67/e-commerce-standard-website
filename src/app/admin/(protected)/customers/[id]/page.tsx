@@ -44,7 +44,7 @@ export default async function AdminCustomerDetailPage({
             <ArrowLeft className="h-5 w-5" />
           </Link>
           <div>
-            <h1 className="text-2xl font-semibold">{customer.fullName}</h1>
+            <h1 className="page-title">{customer.fullName}</h1>
             <p className="text-sm text-muted-foreground">{customer.phone}</p>
           </div>
         </div>
@@ -54,11 +54,11 @@ export default async function AdminCustomerDetailPage({
       <div className="grid gap-4 sm:grid-cols-3">
         <Card><CardContent className="p-4">
           <p className="text-sm text-muted-foreground">Total Orders</p>
-          <p className="text-2xl font-semibold">{customer.orders.length}</p>
+          <p className="page-title">{customer.orders.length}</p>
         </CardContent></Card>
         <Card><CardContent className="p-4">
           <p className="text-sm text-muted-foreground">Order Value</p>
-          <p className="text-2xl font-semibold">{formatCurrency(orderValue)}</p>
+          <p className="page-title">{formatCurrency(orderValue)}</p>
         </CardContent></Card>
         <Card><CardContent className="p-4">
           <p className="text-sm text-muted-foreground">Type</p>

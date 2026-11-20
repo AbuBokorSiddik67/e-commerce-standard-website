@@ -21,7 +21,8 @@ export default async function AdminOrderDetailPage({
   await requireAdmin();
   const { id } = await params;
   const orderResult = await attempt("admin.orderDetail", () => getOrderById(id));
-  await getStoreSettings();
+  const { currencySymbol } = await getStoreSettings();
+  const money = (value: number) => formatCurrency(value, currencySymbol);
 
   if (!orderResult.ok) {
     return (
@@ -38,13 +39,13 @@ export default async function AdminOrderDetailPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Link href="/admin/orders" className="text-muted-foreground hover:text-foreground" aria-label="Back to orders">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <Link href="/admin/orders" className="grid size-10 shrink-0 place-items-center rounded-lg border bg-card text-muted-foreground hover:text-foreground" aria-label="Back to orders">
             <ArrowLeft className="h-5 w-5" />
           </Link>
           <div>
-            <h1 className="text-2xl font-semibold">{order.orderNumber}</h1>
+            <h1 className="page-title">{order.orderNumber}</h1>
             <p className="text-sm text-muted-foreground">Placed {formatDateTime(order.placedAt)}</p>
           </div>
         </div>
@@ -53,38 +54,38 @@ export default async function AdminOrderDetailPage({
         </Badge>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="space-y-6 lg:col-span-2">
-          <Card>
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+        <div className="min-w-0 space-y-5 lg:col-span-2">
+          <Card className="surface min-w-0">
             <CardHeader><CardTitle className="text-base">Items</CardTitle></CardHeader>
             <CardContent>
               <ul className="divide-y">
                 {order.items.map((item) => (
-                  <li key={item.id} className="flex items-center justify-between py-3">
+                  <li key={item.id} className="flex flex-wrap items-center justify-between gap-2 py-3">
                     <div>
                       <p className="font-medium">{item.name}</p>
                       {item.variant && <p className="text-xs text-muted-foreground">{item.variant}</p>}
                       <p className="text-xs text-muted-foreground">
-                        {formatCurrency(Number(item.price))} × {item.quantity}
+                        {money(Number(item.price))} × {item.quantity}
                       </p>
                     </div>
-                    <p className="font-medium">{formatCurrency(Number(item.lineTotal))}</p>
+                    <p className="font-medium">{money(Number(item.lineTotal))}</p>
                   </li>
                 ))}
               </ul>
               <Separator className="my-4" />
-              <div className="space-y-1 text-sm">
-                <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span>{formatCurrency(Number(order.subtotal))}</span></div>
+              <div className="space-y-1 break-words text-sm">
+                <div className="flex flex-wrap justify-between gap-x-2"><span className="text-muted-foreground">Subtotal</span><span>{money(Number(order.subtotal))}</span></div>
                 {Number(order.discount) > 0 && (
-                  <div className="flex justify-between"><span className="text-muted-foreground">Discount</span><span>-{formatCurrency(Number(order.discount))}</span></div>
+                  <div className="flex flex-wrap justify-between gap-x-2"><span className="text-muted-foreground">Discount</span><span>-{money(Number(order.discount))}</span></div>
                 )}
-                <div className="flex justify-between"><span className="text-muted-foreground">Delivery ({order.zone?.name})</span><span>{formatCurrency(Number(order.deliveryCharge))}</span></div>
-                <div className="flex justify-between text-base font-semibold"><span>Total</span><span>{formatCurrency(Number(order.total))}</span></div>
+                <div className="flex flex-wrap justify-between gap-x-2"><span className="text-muted-foreground">Delivery ({order.zone?.name})</span><span>{money(Number(order.deliveryCharge))}</span></div>
+                <div className="flex flex-wrap justify-between gap-x-2 text-base font-semibold"><span>Total</span><span>{money(Number(order.total))}</span></div>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="print:hidden">
+          <Card className="surface min-w-0 print:hidden">
             <CardHeader><CardTitle className="text-base">Manage Order</CardTitle></CardHeader>
             <CardContent>
               <OrderStatusControls
@@ -98,9 +99,9 @@ export default async function AdminOrderDetailPage({
         </div>
 
         <div className="space-y-6">
-          <Card>
+          <Card className="surface min-w-0">
             <CardHeader><CardTitle className="text-base">Customer</CardTitle></CardHeader>
-            <CardContent className="space-y-1 text-sm">
+            <CardContent className="space-y-1 break-words text-sm">
               <p className="font-medium">{order.fullName}</p>
               <p>{order.phone}</p>
               {order.email && <p className="text-muted-foreground">{order.email}</p>}
@@ -110,9 +111,9 @@ export default async function AdminOrderDetailPage({
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="surface min-w-0">
             <CardHeader><CardTitle className="text-base">Delivery Address</CardTitle></CardHeader>
-            <CardContent className="space-y-1 text-sm">
+            <CardContent className="space-y-1 break-words text-sm">
               <p>{order.shippingAddress}</p>
               <p>{order.city}, {order.district}</p>
               {order.postalCode && <p>{order.postalCode}</p>}
@@ -121,15 +122,15 @@ export default async function AdminOrderDetailPage({
           </Card>
 
           {order.customerNotes && (
-            <Card>
+            <Card className="surface min-w-0">
               <CardHeader><CardTitle className="text-base">Customer Notes</CardTitle></CardHeader>
               <CardContent className="text-sm">{order.customerNotes}</CardContent>
             </Card>
           )}
 
-          <Card className="print:hidden">
+          <Card className="surface min-w-0 print:hidden">
             <CardHeader><CardTitle className="text-base">Payment</CardTitle></CardHeader>
-            <CardContent className="space-y-1 text-sm">
+            <CardContent className="space-y-1 break-words text-sm">
               <p>Method: Cash on Delivery (COD)</p>
               <p>Status: <Badge variant={order.paymentStatus === "PAID" ? "secondary" : "outline"}>
                 {PAYMENT_STATUS_LABELS[order.paymentStatus]?.en ?? order.paymentStatus}
@@ -137,7 +138,7 @@ export default async function AdminOrderDetailPage({
               {order.cancelReason && <p className="text-destructive">Cancelled: {order.cancelReason}</p>}
             </CardContent>
           </Card>
-          <Card className="print:hidden">
+          <Card className="surface min-w-0 print:hidden">
             <CardHeader><CardTitle className="text-base">Recent Order Activity</CardTitle></CardHeader>
             <CardContent className="space-y-2 text-sm">
               <p>Order received · {formatDateTime(order.placedAt)}</p>

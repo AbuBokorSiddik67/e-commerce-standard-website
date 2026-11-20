@@ -139,9 +139,9 @@ export function CouponManager({ coupons, products, categories }: ScopeOptions & 
 
       <Card>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto" role="region" aria-label="Coupons table" tabIndex={0}>
             <table className="w-full text-sm">
-              <thead>
+              <thead className="bg-muted/60">
                 <tr className="border-b text-left text-muted-foreground">
                   <th className="p-4 font-medium">Code</th>
                   <th className="p-4 font-medium">Discount</th>

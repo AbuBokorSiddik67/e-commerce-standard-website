@@ -122,7 +122,7 @@ export async function storefrontListProducts(params: {
       { shortDesc: { contains: params.search, mode: "insensitive" } },
     ];
   }
-  if (params.categorySlug) where.categories = { some: { slug: params.categorySlug } };
+  if (params.categorySlug) where.categories = { some: { slug: params.categorySlug, isActive: true } };
 
   const minPrice = toFiniteNumber(params.minPrice);
   const maxPrice = toFiniteNumber(params.maxPrice);

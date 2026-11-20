@@ -61,13 +61,12 @@ export default async function HomePage() {
         const s = (section.settings ?? {}) as Record<string, unknown>;
         switch (section.sectionKey) {
           case 'HERO': {
-            const hero = sectionData as { slides?: Banner[] } | undefined;
+            const hero = sectionData as { slides?: Banner[]; side?: Banner[] } | undefined;
             return (
-              <HeroBanner
-                key={section.id}
-                section={section}
-                banners={hero?.slides}
-              />
+              <div key={section.id}>
+                <HeroBanner section={section} banners={hero?.slides} />
+                <OfferBanner banners={hero?.side} compact />
+              </div>
             );
           }
           case 'TRUST_STRIP':
@@ -151,36 +150,15 @@ export default async function HomePage() {
   );
 }
 
-function OfferBanner({ banners }: { banners: Banner[] | undefined }) {
+function OfferBanner({ banners, compact = false }: { banners: Banner[] | undefined; compact?: boolean }) {
   if (!banners || banners.length === 0) return null;
-  const banner = banners[0];
-  return (
-    <section className="container-page py-5">
-      <div className="relative w-full overflow-hidden rounded-lg">
-        <div className="relative h-24 w-full sm:h-32 lg:h-36">
-          <Image
-            src={banner.image}
-            alt={banner.title ?? 'Offer'}
-            fill
-            priority
-            className="object-cover"
-            sizes="100vw"
-          />
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/40 px-4 text-center text-white">
-            {banner.title && (
-              <h2 className="text-lg font-bold sm:text-2xl">{banner.title}</h2>
-            )}
-            {banner.subtitle && (
-              <p className="mt-1 text-xs sm:text-sm">{banner.subtitle}</p>
-            )}
-            {banner.ctaText && safeLink(banner.ctaLink) && (
-              <Button asChild className="mt-2 h-8 px-3 text-xs" size="sm">
-                <Link href={safeLink(banner.ctaLink) ?? "/products"}>{banner.ctaText}</Link>
-              </Button>
-            )}
-          </div>
-        </div>
-      </div>
-    </section>
-  );
+  return <section aria-label="Store offers" className={`container-page grid gap-3 ${compact ? "pt-4 sm:grid-cols-2" : "py-5"}`}>
+    {(compact ? banners : banners.slice(0, 1)).map(banner => <div key={banner.id} className="relative isolate flex min-h-32 flex-col justify-center overflow-hidden rounded-2xl bg-[#16243d] p-4 text-white sm:p-6">
+      <Image src={banner.image} alt={banner.title ?? "Store offer"} fill className="-z-10 object-cover" sizes={compact ? "(max-width: 639px) 100vw, 50vw" : "100vw"} />
+      <div className="absolute inset-0 -z-10 bg-black/65" />
+      {banner.title && <h2 className="text-lg font-bold sm:text-xl">{banner.title}</h2>}
+      {banner.subtitle && <p className="mt-1 text-sm">{banner.subtitle}</p>}
+      {banner.ctaText && safeLink(banner.ctaLink) && <Button asChild size="sm" className="mt-3 self-start"><Link href={safeLink(banner.ctaLink) ?? "/products"}>{banner.ctaText}</Link></Button>}
+    </div>)}
+  </section>;
 }
