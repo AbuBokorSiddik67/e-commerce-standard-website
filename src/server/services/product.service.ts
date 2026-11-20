@@ -3,6 +3,7 @@ import { slugify } from "@/lib/utils";
 import type { ProductInput } from "@/lib/validations/admin";
 import { writeAuditLog } from "@/lib/audit";
 import { Prisma } from "@prisma/client";
+import { orderTransaction } from "./order-transaction";
 
 type DecimalInput = number | string;
 
@@ -12,6 +13,7 @@ function toDecimal(v: DecimalInput | null | undefined): Prisma.Decimal | null | 
 }
 
 export async function createProduct(input: ProductInput, adminId: string) {
+  if (input.variants.some((v) => v.id)) throw new Error("New variants must not provide existing IDs");
   const slug = input.slug ? slugify(input.slug) : slugify(input.name) + "-" + Date.now().toString(36);
   const product = await prisma.product.create({
     data: {
@@ -19,9 +21,9 @@ export async function createProduct(input: ProductInput, adminId: string) {
       slug,
       shortDesc: input.shortDesc || null,
       description: input.description || null,
-      price: input.price as any,
-      compareAtPrice: toDecimal(input.compareAtPrice) as any,
-      costPrice: toDecimal(input.costPrice) as any,
+      price: input.price,
+      compareAtPrice: toDecimal(input.compareAtPrice) ?? null,
+      costPrice: toDecimal(input.costPrice) ?? null,
       sku: input.sku || null,
       stock: input.stock,
       lowStockThreshold: input.lowStockThreshold,
@@ -43,7 +45,7 @@ export async function createProduct(input: ProductInput, adminId: string) {
           name: v.name,
           value: v.value,
           sku: v.sku || null,
-          price: toDecimal(v.price) as any,
+          price: toDecimal(v.price),
           stock: v.stock,
         })),
       },
@@ -61,44 +63,68 @@ export async function createProduct(input: ProductInput, adminId: string) {
 
 export async function updateProduct(id: string, input: ProductInput, adminId: string) {
   const slug = input.slug ? slugify(input.slug) : undefined;
-  const product = await prisma.product.update({
-    where: { id },
-    data: {
-      name: input.name,
-      ...(slug ? { slug } : {}),
-      shortDesc: input.shortDesc || null,
-      description: input.description || null,
-      price: input.price as any,
-      compareAtPrice: toDecimal(input.compareAtPrice) as any,
-      costPrice: toDecimal(input.costPrice) as any,
-      sku: input.sku || null,
-      stock: input.stock,
-      lowStockThreshold: input.lowStockThreshold,
-      isFeatured: input.isFeatured,
-      isActive: input.isActive,
-      seoTitle: input.seoTitle || null,
-      seoDescription: input.seoDescription || null,
-      weightGrams: input.weightGrams ? Number(input.weightGrams) : null,
-      categories: { set: input.categoryIds.map((cid) => ({ id: cid })) },
-      images: {
-        deleteMany: {},
-        create: input.images.map((img, i) => ({
-          url: img.url,
-          altText: img.altText || null,
-          sortOrder: i,
-        })),
+  const product = await orderTransaction(async (tx) => {
+    const current = await tx.product.findUniqueOrThrow({ where: { id }, select: {
+      stock: true, variants: { where: { isActive: true }, select: { id: true, stock: true } },
+    } });
+    const editedIds = input.variants.flatMap((variant) => variant.id ? [variant.id] : []);
+    if (new Set(editedIds).size !== editedIds.length) throw new Error("Duplicate variant IDs");
+    const existing = new Map(current.variants.map((variant) => [variant.id, variant]));
+    if (input.originalVariantIds) {
+      const prior = new Set(input.originalVariantIds);
+      if (prior.size !== existing.size || [...prior].some((variantId) => !existing.has(variantId))) {
+        throw new Error("Variants changed after opening this form. Reload before editing.");
+      }
+    }
+    const checkStock = (stored: number, prior: number | undefined, requested: number) => {
+      if (requested === prior || requested === stored) return undefined;
+      if (prior !== stored) throw new Error("Stock was changed after opening this form. Reload before making an adjustment.");
+      return requested;
+    };
+    const baseStock = checkStock(current.stock, input.originalStock, input.stock);
+    const saved = await tx.product.update({ where: { id },
+      data: {
+        name: input.name,
+        ...(slug ? { slug } : {}),
+        shortDesc: input.shortDesc || null,
+        description: input.description || null,
+        price: input.price,
+        compareAtPrice: toDecimal(input.compareAtPrice) ?? null,
+        costPrice: toDecimal(input.costPrice) ?? null,
+        sku: input.sku || null,
+        ...(baseStock === undefined ? {} : { stock: baseStock }),
+        lowStockThreshold: input.lowStockThreshold,
+        isFeatured: input.isFeatured,
+        isActive: input.isActive,
+        seoTitle: input.seoTitle || null,
+        seoDescription: input.seoDescription || null,
+        weightGrams: input.weightGrams ? Number(input.weightGrams) : null,
+        categories: { set: input.categoryIds.map((cid) => ({ id: cid })) },
+        images: {
+          deleteMany: {},
+          create: input.images.map((img, i) => ({
+            url: img.url,
+            altText: img.altText || null,
+            sortOrder: i,
+          })),
+        },
       },
-      variants: {
-        deleteMany: {},
-        create: input.variants.map((v) => ({
-          name: v.name,
-          value: v.value,
-          sku: v.sku || null,
-          price: toDecimal(v.price) as any,
-          stock: v.stock,
-        })),
-      },
-    },
+    });
+    const removed = current.variants.filter((variant) => !editedIds.includes(variant.id));
+    if (removed.length) await tx.productVariant.updateMany({
+      where: { productId: id, id: { in: removed.map((variant) => variant.id) } }, data: { isActive: false },
+    });
+    for (const variant of input.variants) {
+      const values = { name: variant.name, value: variant.value, sku: variant.sku || null, price: toDecimal(variant.price) ?? null };
+      if (!variant.id) await tx.productVariant.create({ data: { ...values, productId: id, stock: variant.stock } });
+      else {
+        const row = existing.get(variant.id);
+        if (!row) throw new Error("A variant does not belong to this active product. Reload before editing.");
+        const stock = checkStock(row.stock, variant.originalStock, variant.stock);
+        await tx.productVariant.update({ where: { id: row.id }, data: { ...values, ...(stock === undefined ? {} : { stock }) } });
+      }
+    }
+    return saved;
   });
   await writeAuditLog({
     userId: adminId,
@@ -111,10 +137,10 @@ export async function updateProduct(id: string, input: ProductInput, adminId: st
 }
 
 export async function deleteProduct(id: string, adminId: string) {
-  const product = await prisma.product.delete({ where: { id } });
+  const product = await prisma.product.update({ where: { id }, data: { isActive: false } });
   await writeAuditLog({
     userId: adminId,
-    action: "PRODUCT_DELETE",
+    action: "PRODUCT_ARCHIVE",
     entity: "Product",
     entityId: id,
     detail: { name: product.name },
@@ -134,10 +160,10 @@ export async function bulkUpdateProducts(ids: string[], data: { isActive?: boole
 }
 
 export async function bulkDeleteProducts(ids: string[], adminId: string) {
-  const res = await prisma.product.deleteMany({ where: { id: { in: ids } } });
+  const res = await prisma.product.updateMany({ where: { id: { in: ids } }, data: { isActive: false } });
   await writeAuditLog({
     userId: adminId,
-    action: "PRODUCT_BULK_DELETE",
+    action: "PRODUCT_BULK_ARCHIVE",
     entity: "Product",
     detail: { ids, count: res.count },
   });

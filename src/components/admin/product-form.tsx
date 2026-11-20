@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { saveProductAction, deleteProductAction } from "@/server/actions/admin";
+import { saveProductAction } from "@/server/actions/admin";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,7 +17,7 @@ import type { SafeProduct } from "@/types/domain";
 
 type Category = { id: string; name: string };
 
-type Variant = { name: string; value: string; sku: string; price: string; stock: number };
+type Variant = { id?: string; originalStock?: number; name: string; value: string; sku: string; price: string; stock: number };
 
 export function ProductForm({
   product, categories,
@@ -46,7 +46,7 @@ export function ProductForm({
     product?.images?.map((i) => ({ url: i.url, altText: i.altText ?? "" })) ?? [],
   );
   const [variants, setVariants] = useState<Variant[]>(product?.variants?.map((v) => ({
-    name: v.name, value: v.value, sku: v.sku ?? "", price: v.price ?? "", stock: v.stock,
+    id: v.id, originalStock: v.stock, name: v.name, value: v.value, sku: v.sku ?? "", price: v.price ?? "", stock: v.stock,
   })) ?? []);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -66,6 +66,10 @@ export function ProductForm({
     fd.set("costPrice", costPrice);
     fd.set("sku", sku);
     fd.set("stock", stock || "0");
+    if (product) {
+      fd.set("originalStock", String(product.stock));
+      for (const variant of product.variants) fd.append("originalVariantIds", variant.id);
+    }
     fd.set("lowStockThreshold", lowStockThreshold || "5");
     fd.set("isFeatured", isFeatured ? "true" : "false");
     fd.set("isActive", isActive ? "true" : "false");
@@ -148,13 +152,14 @@ export function ProductForm({
               </Button>
             </CardHeader>
             <CardContent className="space-y-3">
-              {variants.length === 0 && <p className="text-sm text-muted-foreground">No variants (optional)</p>}
+              <p className="text-sm text-muted-foreground">Variant products use each variant’s stock. Removing a variant archives it, so existing orders can still restore stock.</p>
               {variants.map((v, i) => (
-                <div key={i} className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                <div key={v.id ?? i} className="grid grid-cols-2 gap-2 sm:grid-cols-6">
                   <Input placeholder="Name (e.g. Size)" value={v.name} onChange={(e) => setVariants(variants.map((vv, idx) => idx === i ? { ...vv, name: e.target.value } : vv))} />
                   <Input placeholder="Value (e.g. L)" value={v.value} onChange={(e) => setVariants(variants.map((vv, idx) => idx === i ? { ...vv, value: e.target.value } : vv))} />
-                  <Input placeholder="Price" type="number" value={v.price} onChange={(e) => setVariants(variants.map((vv, idx) => idx === i ? { ...vv, price: e.target.value } : vv))} />
-                  <Input placeholder="Stock" type="number" value={v.stock} onChange={(e) => setVariants(variants.map((vv, idx) => idx === i ? { ...vv, stock: Number(e.target.value) } : vv))} />
+                  <Input placeholder="Variant SKU" value={v.sku} onChange={(e) => setVariants(variants.map((vv, idx) => idx === i ? { ...vv, sku: e.target.value } : vv))} />
+                  <Input placeholder="Price" type="number" min="0" step="0.01" value={v.price} onChange={(e) => setVariants(variants.map((vv, idx) => idx === i ? { ...vv, price: e.target.value } : vv))} />
+                  <Input placeholder="Stock" type="number" min="0" step="1" value={v.stock} onChange={(e) => setVariants(variants.map((vv, idx) => idx === i ? { ...vv, stock: Number(e.target.value) } : vv))} />
                   <Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => setVariants(variants.filter((_, idx) => idx !== i))}>
                     <Trash2 className="h-4 w-4" />
                   </Button>

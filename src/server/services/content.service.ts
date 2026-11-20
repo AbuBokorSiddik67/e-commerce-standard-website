@@ -73,53 +73,47 @@ export async function listCoupons() {
   return prisma.coupon.findMany({ orderBy: { createdAt: "desc" } });
 }
 
-export async function createCoupon(input: CouponInput, adminId: string) {
-  const coupon = await prisma.coupon.create({
-    data: {
-      code: input.code.toUpperCase(),
-      type: input.type,
-      value: input.value as any,
-      minOrderAmount: input.minOrderAmount ? (input.minOrderAmount as any) : null,
-      usageLimit: input.usageLimit ? Number(input.usageLimit) : null,
-      expiresAt: input.expiresAt ? new Date(input.expiresAt) : null,
-      isActive: input.isActive,
-    },
+function couponData(input: CouponInput) {
+  return {
+    code: input.code,
+    type: input.type,
+    value: input.value,
+    minOrderAmount: typeof input.minOrderAmount === "number" ? input.minOrderAmount : null,
+    usageLimit: typeof input.usageLimit === "number" ? input.usageLimit : null,
+    // A displayed expiry date includes that full day in Bangladesh (UTC+06:00).
+    expiresAt: input.expiresAt ? new Date(Date.parse(`${input.expiresAt}T00:00:00+06:00`) + 86_400_000) : null,
+    isActive: input.isActive,
+    productIds: [...new Set(input.productIds)],
+    categoryIds: [...new Set(input.categoryIds)],
+  };
+}
+
+async function saveCoupon(id: string | null, input: CouponInput) {
+  const data = couponData(input);
+  return prisma.$transaction(async (tx) => {
+    const [products, categories] = await Promise.all([
+      tx.product.count({ where: { id: { in: data.productIds } } }),
+      tx.category.count({ where: { id: { in: data.categoryIds } } }),
+    ]);
+    if (products !== data.productIds.length || categories !== data.categoryIds.length) throw new Error("Select existing coupon products and categories");
+    return id ? tx.coupon.update({ where: { id }, data }) : tx.coupon.create({ data });
   });
-  await writeAuditLog({ userId: adminId, action: "COUPON_CREATE", entity: "Coupon", entityId: coupon.id, detail: { code: coupon.code } });
+}
+
+export async function createCoupon(input: CouponInput, adminId: string) {
+  const coupon = await saveCoupon(null, input);
+  await writeAuditLog({ userId: adminId, action: "COUPON_CREATE", entity: "Coupon", entityId: coupon.id });
   return coupon;
 }
 
 export async function updateCoupon(id: string, input: CouponInput, adminId: string) {
-  const coupon = await prisma.coupon.update({
-    where: { id },
-    data: {
-      code: input.code.toUpperCase(),
-      type: input.type,
-      value: input.value as any,
-      minOrderAmount: input.minOrderAmount ? (input.minOrderAmount as any) : null,
-      usageLimit: input.usageLimit ? Number(input.usageLimit) : null,
-      expiresAt: input.expiresAt ? new Date(input.expiresAt) : null,
-      isActive: input.isActive,
-    },
-  });
-  await writeAuditLog({ userId: adminId, action: "COUPON_UPDATE", entity: "Coupon", entityId: id, detail: { code: coupon.code } });
+  const coupon = await saveCoupon(id, input);
+  await writeAuditLog({ userId: adminId, action: "COUPON_UPDATE", entity: "Coupon", entityId: id });
   return coupon;
 }
 
 export async function deleteCoupon(id: string, adminId: string) {
-  const coupon = await prisma.coupon.delete({ where: { id } });
-  await writeAuditLog({ userId: adminId, action: "COUPON_DELETE", entity: "Coupon", entityId: id, detail: { code: coupon.code } });
+  const coupon = await prisma.coupon.update({ where: { id }, data: { isActive: false } });
+  await writeAuditLog({ userId: adminId, action: "COUPON_ARCHIVE", entity: "Coupon", entityId: id });
   return coupon;
-}
-
-export async function validateCoupon(code: string, subtotal: number) {
-  const coupon = await prisma.coupon.findUnique({ where: { code: code.toUpperCase() } });
-  if (!coupon) return { valid: false as const, error: "Invalid coupon code" };
-  if (!coupon.isActive) return { valid: false as const, error: "This coupon is no longer active" };
-  if (coupon.expiresAt && coupon.expiresAt < new Date()) return { valid: false as const, error: "This coupon has expired" };
-  if (coupon.usageLimit !== null && coupon.usedCount >= coupon.usageLimit)
-    return { valid: false as const, error: "This coupon has reached its usage limit" };
-  if (coupon.minOrderAmount && subtotal < Number(coupon.minOrderAmount))
-    return { valid: false as const, error: `Minimum order amount is ৳${Number(coupon.minOrderAmount)}` };
-  return { valid: true as const, coupon };
 }

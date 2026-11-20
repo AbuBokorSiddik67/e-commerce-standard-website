@@ -5,7 +5,6 @@ import { getCustomerById } from "@/server/services/customer.service";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
 import { ORDER_STATUS_LABELS } from "@/lib/constants";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CustomerRowActions } from "@/components/admin/customer-row-actions";
 import { AppError } from "@/components/shared/app-error";
@@ -35,7 +34,7 @@ export default async function AdminCustomerDetailPage({
   if (!customer) notFound();
 
   const validOrders = customer.orders.filter((o) => o.status !== "CANCELLED" && o.status !== "RETURNED");
-  const totalSpent = validOrders.reduce((sum, o) => sum + Number(o.total), 0);
+  const orderValue = validOrders.reduce((sum, o) => sum + Number(o.total), 0);
 
   return (
     <div className="space-y-6">
@@ -58,8 +57,8 @@ export default async function AdminCustomerDetailPage({
           <p className="text-2xl font-semibold">{customer.orders.length}</p>
         </CardContent></Card>
         <Card><CardContent className="p-4">
-          <p className="text-sm text-muted-foreground">Total Spent</p>
-          <p className="text-2xl font-semibold">{formatCurrency(totalSpent)}</p>
+          <p className="text-sm text-muted-foreground">Order Value</p>
+          <p className="text-2xl font-semibold">{formatCurrency(orderValue)}</p>
         </CardContent></Card>
         <Card><CardContent className="p-4">
           <p className="text-sm text-muted-foreground">Type</p>

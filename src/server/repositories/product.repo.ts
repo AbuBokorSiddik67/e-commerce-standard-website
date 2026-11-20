@@ -38,14 +38,19 @@ export async function listProducts(params: {
 export async function getProductById(id: string) {
   return prisma.product.findUnique({
     where: { id },
-    include: { images: { orderBy: { sortOrder: "asc" } }, variants: true, categories: true },
+    include: { images: { orderBy: { sortOrder: "asc" } }, variants: { where: { isActive: true } }, categories: true },
   });
 }
+
+const variantAvailability = {
+  variants: { where: { isActive: true }, select: { stock: true, price: true } },
+  _count: { select: { variants: true } },
+} satisfies Prisma.ProductInclude;
 
 export async function getFeaturedProducts(limit = 8) {
   return prisma.product.findMany({
     where: { isFeatured: true, isActive: true },
-    include: { images: { orderBy: { sortOrder: "asc" } } },
+    include: { images: { orderBy: { sortOrder: "asc" } }, ...variantAvailability },
     orderBy: { createdAt: "desc" },
     take: limit,
   });
@@ -54,7 +59,7 @@ export async function getFeaturedProducts(limit = 8) {
 export async function getNewArrivals(limit = 8) {
   return prisma.product.findMany({
     where: { isActive: true },
-    include: { images: { orderBy: { sortOrder: "asc" } } },
+    include: { images: { orderBy: { sortOrder: "asc" } }, ...variantAvailability },
     orderBy: { createdAt: "desc" },
     take: limit,
   });
@@ -72,7 +77,7 @@ export async function getBestSellers(limit = 8) {
   const ids = best.map((b) => b.productId).filter((id): id is string => !!id);
   const items = await prisma.product.findMany({
     where: { id: { in: ids }, isActive: true },
-    include: { images: { orderBy: { sortOrder: "asc" } } },
+    include: { images: { orderBy: { sortOrder: "asc" } }, ...variantAvailability },
   });
   items.sort((a, b) => ids.indexOf(a.id) - ids.indexOf(b.id));
   return items;
@@ -85,7 +90,7 @@ export async function getRelatedProducts(productId: string, categoryIds: string[
       id: { not: productId },
       categories: categoryIds.length ? { some: { id: { in: categoryIds } } } : undefined,
     },
-    include: { images: { orderBy: { sortOrder: "asc" } } },
+    include: { images: { orderBy: { sortOrder: "asc" } }, ...variantAvailability },
     orderBy: { createdAt: "desc" },
     take: limit,
   });
@@ -95,7 +100,7 @@ export async function getProductsByIds(ids: string[]) {
   if (!ids.length) return [];
   const products = await prisma.product.findMany({
     where: { id: { in: ids }, isActive: true },
-    include: { images: { orderBy: { sortOrder: "asc" } } },
+    include: { images: { orderBy: { sortOrder: "asc" } }, ...variantAvailability },
   });
   return products.sort((a, b) => ids.indexOf(a.id) - ids.indexOf(b.id));
 }
@@ -127,7 +132,10 @@ export async function storefrontListProducts(params: {
       ...(maxPrice !== undefined ? { lte: maxPrice } : {}),
     };
   }
-  if (params.inStock) where.stock = { gt: 0 };
+  if (params.inStock) where.AND = [{ OR: [
+    { variants: { none: {} }, stock: { gt: 0 } },
+    { variants: { some: { isActive: true, stock: { gt: 0 } } } },
+  ] }];
 
   const orderBy: Prisma.ProductOrderByWithRelationInput =
     params.sort === "price_low" ? { price: "asc" }
@@ -141,7 +149,7 @@ export async function storefrontListProducts(params: {
   const [items, total] = await Promise.all([
     prisma.product.findMany({
       where,
-      include: { images: { orderBy: { sortOrder: "asc" } }, _count: { select: { reviews: true } } },
+      include: { images: { orderBy: { sortOrder: "asc" } }, ...variantAvailability },
       orderBy,
       skip: (page - 1) * perPage,
       take: perPage,

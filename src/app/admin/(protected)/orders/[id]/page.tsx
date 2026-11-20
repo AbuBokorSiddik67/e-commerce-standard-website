@@ -4,13 +4,13 @@ import { requireAdmin } from "@/lib/auth-guard";
 import { getOrderById } from "@/server/services/order.service";
 import { getStoreSettings } from "@/server/repositories/settings.repo";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
-import { ORDER_STATUS_LABELS } from "@/lib/constants";
+import { ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS } from "@/lib/constants";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { OrderStatusControls } from "@/components/admin/order-status-controls";
 import { AppError } from "@/components/shared/app-error";
-import { attempt } from "@/lib/errors";
+import { attempt, isPlainObject } from "@/lib/errors";
 import { ArrowLeft } from "lucide-react";
 
 export default async function AdminOrderDetailPage({
@@ -104,7 +104,7 @@ export default async function AdminOrderDetailPage({
               <p className="font-medium">{order.fullName}</p>
               <p>{order.phone}</p>
               {order.email && <p className="text-muted-foreground">{order.email}</p>}
-              {order.customer && (
+              {order.userId && (
                 <Badge variant="outline" className="mt-1">Registered customer</Badge>
               )}
             </CardContent>
@@ -132,9 +132,24 @@ export default async function AdminOrderDetailPage({
             <CardContent className="space-y-1 text-sm">
               <p>Method: Cash on Delivery (COD)</p>
               <p>Status: <Badge variant={order.paymentStatus === "PAID" ? "secondary" : "outline"}>
-                {order.paymentStatus === "PAID" ? "Paid" : "Pending"}
+                {PAYMENT_STATUS_LABELS[order.paymentStatus]?.en ?? order.paymentStatus}
               </Badge></p>
               {order.cancelReason && <p className="text-destructive">Cancelled: {order.cancelReason}</p>}
+            </CardContent>
+          </Card>
+          <Card className="print:hidden">
+            <CardHeader><CardTitle className="text-base">Recent Order Activity</CardTitle></CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              <p>Order received · {formatDateTime(order.placedAt)}</p>
+              {order.activity.map((event) => {
+                const detail = isPlainObject(event.detail) ? event.detail : {};
+                const payment = event.action === "ORDER_PAYMENT_STATUS_CHANGE";
+                const labels = payment ? PAYMENT_STATUS_LABELS : ORDER_STATUS_LABELS;
+                const label = (value: unknown) => typeof value === "string" ? labels[value]?.en ?? value : "";
+                const from = label(detail.from);
+                const to = label(detail.to ?? detail.paymentStatus);
+                return <p key={event.id}>{payment ? "Payment" : "Order"}: {from && `${from} → `}{to || "Updated"} · {formatDateTime(event.createdAt)}</p>;
+              })}
             </CardContent>
           </Card>
         </div>

@@ -1,3 +1,4 @@
+import { BANGLADESH_DISTRICTS } from "../src/lib/constants";
 import { PrismaClient, Role } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import bcrypt from "bcryptjs";
@@ -51,11 +52,11 @@ async function main() {
   console.log("Store settings created");
 
   // Delivery zones
-  const dhakaZone = await prisma.deliveryZone.create({
-    data: { name: "Inside Dhaka", charge: 60, estimatedDays: "1-2 days", isActive: true },
+  await prisma.deliveryZone.create({
+    data: { name: "Inside Dhaka", districts: ["Dhaka"], charge: 60, estimatedDays: "1-2 days", isActive: true },
   });
-  const outsideZone = await prisma.deliveryZone.create({
-    data: { name: "Outside Dhaka", charge: 120, estimatedDays: "3-5 days", isActive: true },
+  await prisma.deliveryZone.create({
+    data: { name: "Outside Dhaka", districts: BANGLADESH_DISTRICTS.filter((district) => district !== "Dhaka"), charge: 120, estimatedDays: "3-5 days", isActive: true },
   });
   console.log("Delivery zones created");
 

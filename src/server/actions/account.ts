@@ -19,6 +19,9 @@ import {
   resetPassword,
 } from "@/server/services/account.service";
 
+import { cancelCustomerOrder } from "@/server/services/order.service";
+import { z } from "zod";
+
 type ActionResult = { success: boolean; error?: string; resetUrl?: string; wishlisted?: boolean };
 
 async function clientKey(prefix: string) {
@@ -183,5 +186,22 @@ export async function resetPasswordAction(input: unknown): Promise<ActionResult>
     return { success: true };
   } catch (e) {
     return { success: false, error: actionErrorMessage("account", e, "Could not reset password") };
+  }
+}
+
+export async function cancelMyOrderAction(orderNumber: unknown): Promise<ActionResult> {
+  const userId = await customerId();
+  const parsed = z.string().trim().min(1).max(100).safeParse(orderNumber);
+  if (!userId || !parsed.success) return { success: false, error: "Order not found" };
+  try {
+    await cancelCustomerOrder(userId, parsed.data);
+    revalidatePath("/account/orders");
+    revalidatePath(`/account/orders/${encodeURIComponent(parsed.data)}`);
+    revalidatePath("/admin/orders");
+    revalidatePath("/products");
+    revalidatePath("/");
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: actionErrorMessage("account.cancelOrder", error, "Could not cancel this order") };
   }
 }

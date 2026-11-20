@@ -1,3 +1,4 @@
+import { catalogAvailability } from "@/lib/product-availability";
 import { getStoreSettings } from "@/server/repositories/settings.repo";
 import { storefrontListProducts } from "@/server/repositories/product.repo";
 import { listCategories } from "@/server/services/category.service";
@@ -81,11 +82,10 @@ export default async function ProductsPage({
                     id: p.id,
                     name: p.name,
                     slug: p.slug,
-                    price: p.price.toString(),
+                    ...catalogAvailability(p),
                     compareAtPrice: p.compareAtPrice?.toString() ?? null,
                     images: p.images,
-                    stock: p.stock,
-                    isActive: p.isActive,
+                                        isActive: p.isActive,
                   }}
                   currencySymbol={settings.currencySymbol}
                 />

@@ -41,9 +41,9 @@ export function OrderStatusControls({
     });
   }
 
-  function setPaid(paid: boolean) {
+  function changePayment(next: "PAID" | "PENDING" | "REFUNDED") {
     start(async () => {
-      const res = await updatePaymentStatusAction(orderId, paid ? "PAID" : "PENDING");
+      const res = await updatePaymentStatusAction(orderId, next);
       if (res.success) { toast.success("Payment status updated"); router.refresh(); }
       else toast.error(res.error ?? "Failed");
     });
@@ -57,7 +57,7 @@ export function OrderStatusControls({
     });
   }
 
-  const actions = NEXT_ACTIONS[status] ?? [];
+  const actions = (NEXT_ACTIONS[status] ?? []).filter((action) => action.status !== "CANCELLED" || !["PAID", "REFUNDED"].includes(paymentStatus));
 
   return (
     <div className="space-y-4">
@@ -85,14 +85,14 @@ export function OrderStatusControls({
 
       <div className="flex items-center gap-3">
         <Label>Payment:</Label>
-        {paymentStatus === "PAID" ? (
-          <Button variant="outline" size="sm" disabled={pending} onClick={() => setPaid(false)}>
-            Mark as Unpaid
-          </Button>
-        ) : (
-          <Button size="sm" disabled={pending} onClick={() => setPaid(true)}>
-            Mark as Paid
-          </Button>
+        {status === "DELIVERED" && paymentStatus === "PAID" && (
+          <Button variant="outline" size="sm" disabled={pending} onClick={() => changePayment("PENDING")}>Correct to unpaid</Button>
+        )}
+        {status === "DELIVERED" && ["PENDING", "FAILED"].includes(paymentStatus) && (
+          <Button size="sm" disabled={pending} onClick={() => changePayment("PAID")}>Record COD collection</Button>
+        )}
+        {status === "RETURNED" && paymentStatus === "PAID" && (
+          <Button variant="outline" size="sm" disabled={pending} onClick={() => changePayment("REFUNDED")}>Record completed refund</Button>
         )}
       </div>
 

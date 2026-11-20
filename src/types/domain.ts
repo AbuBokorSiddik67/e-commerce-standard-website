@@ -146,6 +146,7 @@ export type SafeHomepageSection = {
 
 export type SafeDeliveryZone = {
   id: string;
+  districts: string[];
   name: string;
   charge: string;
   estimatedDays: string | null;

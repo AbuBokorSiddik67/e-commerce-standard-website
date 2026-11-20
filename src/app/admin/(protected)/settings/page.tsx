@@ -55,6 +55,7 @@ export default async function AdminSettingsPage() {
         zones={zones.map((z) => ({
           id: z.id,
           name: z.name,
+          districts: z.districts,
           charge: z.charge.toString(),
           estimatedDays: z.estimatedDays,
           isActive: z.isActive,

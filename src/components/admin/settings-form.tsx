@@ -12,10 +12,10 @@ import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ImageUploader } from "./image-uploader";
-import { Loader2, Plus, Trash2 } from "lucide-react";
+import { Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import type { StoreSettings } from "@/types/domain";
 
-type Zone = { id: string; name: string; charge: string; estimatedDays: string | null; isActive: boolean };
+type Zone = { id: string; name: string; charge: string; estimatedDays: string | null; districts: string[]; isActive: boolean };
 
 const COLORS = [
   { key: "primaryColor" as const, label: "Primary Color" },
@@ -172,7 +172,7 @@ export function SettingsForm({ settings, zones }: { settings: StoreSettings; zon
               </div>
               <div className="space-y-2">
                 <Label>Minimum Order Value (blank = none)</Label>
-                <Input type="number" min="0" value={form.minOrderValue ?? ""} onChange={(e) => set("minOrderValue", e.target.value)} />
+                <Input type="number" min="0" step="0.01" value={form.minOrderValue ?? ""} onChange={(e) => set("minOrderValue", e.target.value)} />
               </div>
             </CardContent>
           </Card>
@@ -219,17 +219,24 @@ function DeliveryZonesEditor({ zones }: { zones: Zone[] }) {
   const [name, setName] = useState("");
   const [charge, setCharge] = useState("");
   const [days, setDays] = useState("");
+  const [districts, setDistricts] = useState("");
+  const [active, setActive] = useState(true);
+  const [id, setId] = useState<string | null>(null);
 
-  function add() {
-    if (!name || !charge) { toast.error("Zone name and charge are required"); return; }
+  function edit(zone?: Zone) {
+    setId(zone?.id ?? null); setName(zone?.name ?? ""); setCharge(zone?.charge ?? "");
+    setDays(zone?.estimatedDays ?? ""); setDistricts(zone?.districts.join(", ") ?? "");
+    setActive(zone?.isActive ?? true);
+  }
+
+  function save() {
     const fd = new FormData();
-    fd.set("name", name);
-    fd.set("charge", charge);
-    fd.set("estimatedDays", days);
-    fd.set("isActive", "true");
+    fd.set("name", name); fd.set("charge", charge); fd.set("estimatedDays", days);
+    fd.set("isActive", String(active));
+    for (const district of districts.split(",").map((value) => value.trim()).filter(Boolean)) fd.append("districts", district);
     start(async () => {
-      const res = await saveDeliveryZoneAction(null, fd);
-      if (res.success) { toast.success("Zone added"); setName(""); setCharge(""); setDays(""); router.refresh(); }
+      const res = await saveDeliveryZoneAction(id, fd);
+      if (res.success) { toast.success("Zone saved"); edit(); router.refresh(); }
       else toast.error(res.error ?? "Failed");
     });
   }
@@ -249,8 +256,11 @@ function DeliveryZonesEditor({ zones }: { zones: Zone[] }) {
           <ul className="divide-y">
             {zones.map((z) => (
               <li key={z.id} className="flex items-center justify-between py-2 text-sm">
-                <span>{z.name} — ৳{Number(z.charge)} {z.estimatedDays ? `(${z.estimatedDays})` : ""}</span>
-                <Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => remove(z.id)} aria-label="Delete zone">
+                <div>{z.name} — ৳{Number(z.charge)} {z.isActive ? "" : "(inactive)"}
+                  <p className="text-muted-foreground">{z.districts.join(", ") || "No districts configured"}</p>
+                </div>
+                <Button type="button" variant="ghost" size="icon" disabled={pending} onClick={() => edit(z)} aria-label={`Edit ${z.name}`}><Pencil className="h-4 w-4" /></Button>
+                <Button type="button" variant="ghost" size="icon" className="text-destructive" disabled={pending || !z.isActive} onClick={() => remove(z.id)} aria-label="Deactivate zone">
                   <Trash2 className="h-4 w-4" />
                 </Button>
               </li>
@@ -261,9 +271,14 @@ function DeliveryZonesEditor({ zones }: { zones: Zone[] }) {
           <Input placeholder="Zone name (e.g. Dhaka)" value={name} onChange={(e) => setName(e.target.value)} />
           <Input placeholder="Charge (৳)" type="number" min="0" value={charge} onChange={(e) => setCharge(e.target.value)} />
           <Input placeholder="Est. days (1-2 days)" value={days} onChange={(e) => setDays(e.target.value)} />
-          <Button type="button" onClick={add} disabled={pending}>
-            {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Add
+          <Button type="button" onClick={save} disabled={pending}>
+            {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} {id ? "Save zone" : "Add"}
           </Button>
+        </div>
+        <Label htmlFor="zone-districts">Districts (comma-separated official district names)</Label>
+        <Textarea id="zone-districts" value={districts} onChange={(e) => setDistricts(e.target.value)} placeholder="Dhaka, Gazipur" />
+        <div className="flex items-center gap-3"><Switch id="zone-active" checked={active} onCheckedChange={setActive} /><Label htmlFor="zone-active">Active</Label>
+          {id && <Button type="button" variant="ghost" onClick={() => edit()}>Cancel edit</Button>}
         </div>
       </CardContent>
     </Card>

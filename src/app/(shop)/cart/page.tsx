@@ -17,26 +17,31 @@ export default function CartPage() {
   const clearCart = useCartStore((s) => s.clearCart);
   const couponCode = useCartStore((s) => s.couponCode);
   const setCoupon = useCartStore((s) => s.setCoupon);
-  const subtotal = useCartSubtotal();
+  const estimate = useCartSubtotal();
+  const lines = items.map(({ productId, variantId, quantity }) => ({ productId, variantId, quantity }));
+  const lineKey = JSON.stringify(lines);
   const [code, setCode] = useState(couponCode ?? "");
-  const [discount, setDiscount] = useState(0);
+  const [preview, setPreview] = useState<{ key: string; code: string | null; discount: string; subtotal: string; total: string }>();
   const [loading, setLoading] = useState(false);
 
-  const total = subtotal - discount;
+  const validPreview = couponCode && preview?.code === couponCode && preview.key === lineKey ? preview : undefined;
+  const subtotal = validPreview?.subtotal ?? estimate.toFixed(2);
+  const discount = validPreview?.discount;
+  const total = validPreview?.total ?? subtotal;
 
   async function handleApplyCoupon(e: React.FormEvent) {
     e.preventDefault();
     if (!code.trim()) return;
     setLoading(true);
-    const res = await applyCouponAction(code, subtotal);
-    setLoading(false);
-    if (res.success) {
-      setCoupon(code);
-      setDiscount(res.discount);
-      toast.success("Coupon applied");
-    } else {
-      toast.error(res.error ?? "Invalid coupon");
-    }
+    try {
+      const res = await applyCouponAction({ couponCode: code, items: lines });
+      if (res.success) {
+        setCoupon(res.code);
+        setPreview({ key: lineKey, code: res.code, subtotal: res.subtotal, discount: res.discount, total: res.total });
+        toast.success("Coupon applied");
+      } else toast.error(res.error);
+    } catch { toast.error("Could not check your coupon"); }
+    finally { setLoading(false); }
   }
 
   if (items.length === 0) {
@@ -89,11 +94,11 @@ export default function CartPage() {
               </div>
               <Button type="submit" variant="outline" disabled={loading}>Apply</Button>
             </form>
-            {couponCode && discount > 0 && <p className="text-sm text-green-600">Coupon "{couponCode}" applied</p>}
+            {couponCode && <p className="text-sm text-muted-foreground">Coupon {couponCode} {validPreview ? "applied" : "saved; final discount checked at checkout"}. <button type="button" className="underline" onClick={() => { setCoupon(null); setCode(""); setPreview(undefined); }}>Remove</button></p>}
             <div className="space-y-2 border-t pt-3 text-sm">
               <div className="flex justify-between"><span>Subtotal</span><span>৳{subtotal}</span></div>
-              {discount > 0 && <div className="flex justify-between text-green-600"><span>Discount</span><span>-৳{discount}</span></div>}
-              <div className="flex justify-between border-t pt-2 text-base font-bold"><span>Total</span><span>৳{total}</span></div>
+              {discount && Number(discount) > 0 && <div className="flex justify-between text-green-600"><span>Discount</span><span>-৳{discount}</span></div>}
+              <div className="flex justify-between border-t pt-2 text-base font-bold"><span>Items total</span><span>৳{total}</span></div>
             </div>
             <p className="text-xs text-muted-foreground">Delivery charge calculated at checkout.</p>
             <Button asChild className="w-full" size="lg"><Link href="/checkout">Proceed to Checkout <ArrowRight className="ml-2 h-4 w-4" /></Link></Button>

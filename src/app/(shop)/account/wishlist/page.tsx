@@ -1,3 +1,4 @@
+import { catalogAvailability } from "@/lib/product-availability";
 import Link from "next/link";
 import { requireCustomer } from "@/lib/auth-guard";
 import { listWishlist } from "@/server/services/account.service";
@@ -49,11 +50,10 @@ export default async function AccountWishlistPage() {
               id: product.id,
               name: product.name,
               slug: product.slug,
-              price: product.price.toString(),
+              ...catalogAvailability(product),
               compareAtPrice: product.compareAtPrice?.toString() ?? null,
               images: product.images,
-              stock: product.stock,
-              isActive: product.isActive,
+                            isActive: product.isActive,
             }}
             currencySymbol={settings.currencySymbol}
             initialWishlisted

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { requireAdmin } from "@/lib/auth-guard";
 import { listOrders } from "@/server/services/order.service";
 import { formatCurrency, formatDateTime, toPositiveInt } from "@/lib/utils";
-import { ORDER_STATUS_LABELS } from "@/lib/constants";
+import { ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS } from "@/lib/constants";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -111,7 +111,7 @@ export default async function AdminOrdersPage({
                     <td className="p-4 font-medium">{formatCurrency(Number(o.total))}</td>
                     <td className="p-4">
                       <Badge variant={o.paymentStatus === "PAID" ? "secondary" : "outline"}>
-                        {o.paymentStatus === "PAID" ? "Paid" : "COD Pending"}
+                        {PAYMENT_STATUS_LABELS[o.paymentStatus]?.en ?? o.paymentStatus}
                       </Badge>
                     </td>
                     <td className="p-4">

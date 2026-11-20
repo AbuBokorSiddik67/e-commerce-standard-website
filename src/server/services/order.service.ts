@@ -1,182 +1,102 @@
 import { prisma } from "@/lib/prisma";
 import { generateOrderNumber, toPositiveInt } from "@/lib/utils";
-import { writeAuditLog } from "@/lib/audit";
-import { validateCoupon } from "./content.service";
-import type { CheckoutInput } from "@/lib/validations/customer";
-import type { Prisma } from "@prisma/client";
-import { isOwnedCheckoutReplay, receiptWhere, type CheckoutBuyer, type ReceiptViewer } from "./order-access";
+import { checkoutSchema, type CheckoutInput } from "@/lib/validations/customer";
+import { Prisma, type OrderStatus, type PaymentStatus } from "@prisma/client";
+import { customerOrderOwnership, receiptWhere, type CheckoutBuyer, type ReceiptViewer } from "./order-access";
+import { couponBuyerKey, hashCheckoutPayload, normalizeLines, priceCheckout } from "./checkout-pricing";
+import { orderTransaction } from "./order-transaction";
 
-export async function createOrder(input: CheckoutInput, buyer: CheckoutBuyer) {
-  const userId = buyer.kind === "customer" ? buyer.userId : null;
-  const existing = await prisma.order.findUnique({
-    where: { idempotencyKey: input.idempotencyKey },
-    select: { orderNumber: true, userId: true },
-  });
-  if (existing) {
-    if (!isOwnedCheckoutReplay(buyer, existing.userId)) {
-      throw new Error("Unable to resume this checkout. Check your order status or contact support.");
+type CheckoutResult = { orderNumber: string; guestReceiptExpiresAt?: Date };
+
+export async function createOrder(raw: CheckoutInput, buyer: CheckoutBuyer): Promise<CheckoutResult> {
+  const input = checkoutSchema.parse(raw);
+  const userId = buyer.kind === "customer" ? customerOrderOwnership(buyer.userId).userId : null;
+  const buyerKey = couponBuyerKey(buyer);
+  const { idempotencyKey, expectedQuote, ...payload } = input;
+  // expectedQuote is consent, not pricing and not part of the order intent.
+  const fingerprint = hashCheckoutPayload({ ...payload, items: normalizeLines(payload.items) });
+  return orderTransaction(async (tx) => {
+    if (userId) {
+      const active = await tx.user.findFirst({ where: { id: userId, role: "CUSTOMER", isBlocked: false }, select: { id: true } });
+      if (!active) throw new Error("This customer account cannot place orders");
     }
-    return { orderNumber: existing.orderNumber };
-  }
-
-  const productIds = input.items.map((i) => i.productId);
-  const products = await prisma.product.findMany({ where: { id: { in: productIds }, isActive: true } });
-  if (products.length !== new Set(productIds).size) throw new Error("Some products are no longer available");
-
-  const variantIds = input.items.map((i) => i.variantId).filter((v): v is string => !!v);
-  const variants = variantIds.length
-    ? await prisma.productVariant.findMany({ where: { id: { in: variantIds } } })
-    : [];
-
-  let subtotal = 0;
-  const orderItems: {
-    productId: string;
-    variantId: string | null;
-    name: string;
-    sku: string | null;
-    variant: string | null;
-    price: number;
-    costPrice: number | null;
-    quantity: number;
-    lineTotal: number;
-  }[] = [];
-
-  for (const item of input.items) {
-    const product = products.find((p) => p.id === item.productId);
-    if (!product) throw new Error("Product not found");
-
-    let unitPrice = Number(product.price);
-
-    if (item.variantId) {
-      const variant = variants.find((v) => v.id === item.variantId && v.productId === product.id);
-      if (!variant) throw new Error(`Variant not found for ${product.name}`);
-      if (variant.stock < item.quantity) throw new Error(`Insufficient stock for ${product.name} (${variant.value})`);
-      unitPrice = variant.price !== null ? Number(variant.price) : unitPrice;
-    } else {
-      if (product.stock < item.quantity) throw new Error(`Insufficient stock for ${product.name}`);
-    }
-
-    const lineTotal = unitPrice * item.quantity;
-    subtotal += lineTotal;
-    orderItems.push({
-      productId: product.id,
-      variantId: item.variantId || null,
-      name: product.name,
-      sku: product.sku,
-      variant: item.variantId
-        ? (() => {
-            const v = variants.find((vv) => vv.id === item.variantId);
-            return v ? `${v.name}: ${v.value}` : null;
-          })()
-        : null,
-      price: unitPrice,
-      costPrice: product.costPrice ? Number(product.costPrice) : null,
-      quantity: item.quantity,
-      lineTotal,
-    });
-  }
-
-  let discount = 0;
-  let couponId: string | null = null;
-  if (input.couponCode) {
-    const result = await validateCoupon(input.couponCode, subtotal);
-    if (!result.valid) throw new Error(result.error);
-    discount = result.coupon.type === "PERCENTAGE"
-      ? Math.round((subtotal * Number(result.coupon.value)) / 100)
-      : Math.min(Number(result.coupon.value), subtotal);
-    couponId = result.coupon.id;
-  }
-
-  const zone = await prisma.deliveryZone.findFirst({ where: { id: input.zoneId, isActive: true } });
-  if (!zone) throw new Error("Invalid delivery zone");
-  const deliveryCharge = Number(zone.charge);
-
-  const total = subtotal - discount + deliveryCharge;
-
-  const order = await prisma.$transaction(async (tx) => {
-    for (const item of orderItems) {
-      const updated = await tx.product.updateMany({
-        where: { id: item.productId, stock: { gte: item.quantity } },
-        data: { stock: { decrement: item.quantity } },
-      });
-      if (updated.count === 0) throw new Error(`Insufficient stock for ${item.name}`);
-
-      if (item.variantId) {
-        const variantUpdated = await tx.productVariant.updateMany({
-          where: { id: item.variantId, stock: { gte: item.quantity } },
-          data: { stock: { decrement: item.quantity } },
-        });
-        if (variantUpdated.count === 0) throw new Error(`Insufficient stock for ${item.name}`);
+    const existing = await tx.order.findUnique({ where: { idempotencyKey }, select: {
+      orderNumber: true, userId: true, checkoutFingerprint: true, guestCheckoutScope: true,
+      guestReceiptTokenHash: true, guestReceiptExpiresAt: true,
+    } });
+    if (existing) {
+      const guestMatches = buyer.kind === "guest" && !!buyer.checkoutScope && existing.userId === null &&
+        existing.guestCheckoutScope === buyer.checkoutScope &&
+        existing.guestReceiptTokenHash === buyer.receipt.guestReceiptTokenHash;
+      const ownerMatches = buyer.kind === "customer" && buyer.userId === existing.userId;
+      if ((!guestMatches && !ownerMatches) || existing.checkoutFingerprint !== fingerprint) {
+        throw new Error("Unable to resume this checkout. Check your order status or contact support.");
       }
+      return { orderNumber: existing.orderNumber, ...(guestMatches && existing.guestReceiptExpiresAt
+        ? { guestReceiptExpiresAt: existing.guestReceiptExpiresAt } : {}) };
+    }
+    const quote = await priceCheckout(tx, input, buyerKey);
+    if (expectedQuote && expectedQuote !== quote.summary.fingerprint) throw new Error("The checkout prices changed. Review your updated total before placing the order.");
+
+    if (quote.coupon && buyerKey) {
+      const { id, usageLimit } = quote.coupon;
+      const count = await tx.coupon.updateMany({
+        where: { id, isActive: true, OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+          ...(usageLimit === null ? {} : { usedCount: { lt: usageLimit } }) },
+        data: { usedCount: { increment: 1 } },
+      });
+      if (!count.count) throw new Error("The coupon is no longer available");
+      const redemption = await tx.couponRedemption.createMany({ data: { couponId: id, buyerKey }, skipDuplicates: true });
+      if (!redemption.count) throw new Error("You already used this coupon");
+    }
+    for (const item of quote.items) {
+      const data = { stock: { decrement: item.quantity } };
+      const updated = item.variantId
+        ? await tx.productVariant.updateMany({ where: { id: item.variantId, productId: item.productId, isActive: true, stock: { gte: item.quantity } }, data })
+        : await tx.product.updateMany({ where: { id: item.productId, isActive: true, stock: { gte: item.quantity } }, data });
+      if (!updated.count) throw new Error("Insufficient stock for an item in your cart");
     }
 
     const contact = { fullName: input.fullName, phone: input.phone, email: input.email || null };
-    // Delivery contact details are not proof of account identity. Do not reuse or
-    // attach a guest record, even when its phone matches the current delivery phone.
     let customerId: string;
     if (userId === null) {
       const customer = await tx.customer.create({ data: contact, select: { id: true } });
       customerId = customer.id;
     } else {
       const customer = await tx.customer.findUnique({ where: { userId }, select: { id: true } });
-      if (customer) {
-        customerId = customer.id;
-      } else {
-        // A concurrent first checkout can create this row; never update or reassign it.
+      if (customer) customerId = customer.id;
+      else {
         await tx.customer.createMany({ data: { ...contact, userId }, skipDuplicates: true });
         const linked = await tx.customer.findUniqueOrThrow({ where: { userId }, select: { id: true } });
         customerId = linked.id;
       }
     }
 
-    return tx.order.create({
+    const order = await tx.order.create({
       data: {
-        orderNumber: generateOrderNumber(),
-        customerId,
-        userId,
+        orderNumber: generateOrderNumber(), customerId, userId, idempotencyKey, checkoutFingerprint: fingerprint,
+        guestCheckoutScope: buyer.kind === "guest" ? buyer.checkoutScope : null,
+        inventoryVersion: 2,
         guestReceiptTokenHash: buyer.kind === "guest" ? buyer.receipt.guestReceiptTokenHash : null,
         guestReceiptExpiresAt: buyer.kind === "guest" ? buyer.receipt.guestReceiptExpiresAt : null,
-        fullName: input.fullName,
-        phone: input.phone,
-        email: input.email || null,
-        shippingAddress: input.address,
-        district: input.district,
-        city: input.city,
-        postalCode: input.postalCode || null,
-        zoneId: zone.id,
-        subtotal: subtotal as any,
-        discount: discount as any,
-        deliveryCharge: deliveryCharge as any,
-        total: total as any,
-        paymentMethod: "COD",
-        paymentStatus: "PENDING",
-        status: "PENDING",
-        customerNotes: input.notes || null,
-        couponId,
-        idempotencyKey: input.idempotencyKey,
-        items: {
-          create: orderItems.map((oi) => ({
-            productId: oi.productId,
-            variantId: oi.variantId,
-            name: oi.name,
-            sku: oi.sku,
-            variant: oi.variant,
-            price: oi.price as any,
-            costPrice: (oi.costPrice as any) ?? null,
-            quantity: oi.quantity,
-            lineTotal: oi.lineTotal as any,
-          })),
-        },
+        ...contact, shippingAddress: input.address, district: input.district, city: input.city,
+        postalCode: input.postalCode || null, customerNotes: input.notes || null,
+        zoneId: quote.zone.id, subtotal: quote.subtotal, discount: quote.discount,
+        deliveryCharge: quote.zone.charge, total: quote.total, couponId: quote.coupon?.id,
+        paymentMethod: "COD", paymentStatus: "PENDING", status: "PENDING",
+        items: { create: quote.items.map(({ categories: _categories, ...item }) => {
+          void _categories;
+          return item;
+        }) },
       },
-      select: { orderNumber: true },
+      select: { orderNumber: true, guestReceiptExpiresAt: true },
     });
+    return { orderNumber: order.orderNumber, ...(order.guestReceiptExpiresAt ? { guestReceiptExpiresAt: order.guestReceiptExpiresAt } : {}) };
+  }, (error) => {
+    const target = error.meta?.target ?? error.meta?.driverAdapterError;
+    const detail = JSON.stringify(target ?? "");
+    return detail.includes("idempotencyKey") || detail.includes("orderNumber");
   });
-
-  if (couponId) {
-    await prisma.coupon.update({ where: { id: couponId }, data: { usedCount: { increment: 1 } } });
-  }
-
-  return order;
 }
 
 export async function getOrderReceipt(orderNumber: string, viewer: ReceiptViewer, now = new Date()) {
@@ -235,10 +155,15 @@ export async function listOrders(params: {
 }
 
 export async function getOrderById(id: string) {
-  return prisma.order.findUnique({
-    where: { id },
-    include: { items: { include: { product: true } }, zone: true, customer: true, coupon: true },
-  });
+  const [order, activity] = await prisma.$transaction([
+    prisma.order.findUnique({ where: { id }, include: { items: true, zone: true } }),
+    prisma.auditLog.findMany({
+      where: { entity: "Order", entityId: id, action: { in: ["ORDER_STATUS_CHANGE", "ORDER_PAYMENT_STATUS_CHANGE"] } },
+      select: { id: true, action: true, detail: true, createdAt: true },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 30,
+    }),
+  ], { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead });
+  return order ? { ...order, activity } : null;
 }
 
 export async function getOrderByNumberAndPhone(orderNumber: string, phone: string) {
@@ -248,72 +173,111 @@ export async function getOrderByNumberAndPhone(orderNumber: string, phone: strin
   });
 }
 
-const ALLOWED_TRANSITIONS: Record<string, string[]> = {
-  PENDING: ["CONFIRMED", "CANCELLED"],
-  CONFIRMED: ["PACKED", "CANCELLED"],
-  PACKED: ["SHIPPED", "CANCELLED"],
-  SHIPPED: ["DELIVERED", "RETURNED"],
-  DELIVERED: ["RETURNED"],
-  CANCELLED: [],
-  RETURNED: [],
+const ALLOWED_TRANSITIONS: Record<OrderStatus, readonly OrderStatus[]> = {
+  PENDING: ["CONFIRMED", "CANCELLED"], CONFIRMED: ["PACKED", "CANCELLED"], PACKED: ["SHIPPED", "CANCELLED"],
+  SHIPPED: ["DELIVERED", "RETURNED"], DELIVERED: ["RETURNED"], CANCELLED: [], RETURNED: [],
 };
 
-export async function updateOrderStatus(id: string, newStatus: string, adminId: string, adminNotes?: string, cancelReason?: string) {
-  const order = await prisma.order.findUnique({ where: { id } });
-  if (!order) throw new Error("Order not found");
-  const allowed = ALLOWED_TRANSITIONS[order.status] ?? [];
-  if (!allowed.includes(newStatus)) {
-    throw new Error(`Cannot change status from ${order.status} to ${newStatus}`);
-  }
+type StatusActor = { kind: "admin" | "customer"; userId: string };
 
-  const now = new Date();
-  const data: Prisma.OrderUpdateInput = { status: newStatus as any };
-  if (newStatus === "CONFIRMED") data.confirmedAt = now;
-  if (newStatus === "SHIPPED") data.shippedAt = now;
-  if (newStatus === "DELIVERED") data.deliveredAt = now;
-  if (newStatus === "CANCELLED") {
-    data.cancelledAt = now;
-    if (cancelReason) data.cancelReason = cancelReason;
-    const items = await prisma.orderItem.findMany({ where: { orderId: id } });
-    for (const item of items) {
-      if (item.productId) {
-        await prisma.product.update({
-          where: { id: item.productId },
-          data: { stock: { increment: item.quantity } },
-        });
-      }
-      if (item.variantId) {
-        await prisma.productVariant.update({
-          where: { id: item.variantId },
-          data: { stock: { increment: item.quantity } },
-        });
-      }
-    }
-  }
-  if (adminNotes !== undefined) data.adminNotes = adminNotes;
-
-  const updated = await prisma.order.update({ where: { id }, data });
-  await writeAuditLog({
-    userId: adminId,
-    action: "ORDER_STATUS_CHANGE",
-    entity: "Order",
-    entityId: id,
-    detail: { from: order.status, to: newStatus },
-  });
-  return updated;
+async function assertActor(tx: Prisma.TransactionClient, actor: StatusActor) {
+  const found = await tx.user.findFirst({ where: {
+    id: actor.userId, role: actor.kind === "admin" ? "ADMIN" : "CUSTOMER", isBlocked: false,
+  }, select: { id: true } });
+  if (!found) throw new Error("You cannot change this order");
 }
 
-export async function updatePaymentStatus(id: string, paymentStatus: string, adminId: string) {
-  const updated = await prisma.order.update({
-    where: { id },
-    data: { paymentStatus: paymentStatus as any },
+async function restoreInventory(tx: Prisma.TransactionClient, items: {
+  productId: string | null; variantId: string | null; variant: string | null; quantity: number;
+}[], inventoryVersion: number) {
+  const stock = new Map<string, number>();
+  for (const { productId, variantId, variant, quantity } of items) {
+    // Older canceled orders may reference deleted variants. Do not guess which SKU to credit.
+    if (!productId || (variant && !variantId) || quantity <= 0) throw new Error("This order needs a manual inventory review before cancellation");
+    if (!variantId || inventoryVersion === 1) {
+      const key = JSON.stringify([productId, null]);
+      stock.set(key, (stock.get(key) ?? 0) + quantity);
+    }
+    if (variantId) {
+      const key = JSON.stringify([productId, variantId]);
+      stock.set(key, (stock.get(key) ?? 0) + quantity);
+    }
+  }
+  for (const [key, quantity] of [...stock].sort(([a], [b]) => a < b ? -1 : a === b ? 0 : 1)) {
+    const [productId, variantId] = JSON.parse(key) as [string, string | null];
+    const data = { stock: { increment: quantity } };
+    const updated = variantId
+      ? await tx.productVariant.updateMany({ where: { id: variantId, productId }, data })
+      : await tx.product.updateMany({ where: { id: productId }, data });
+    if (!updated.count) throw new Error("This order needs a manual inventory review before cancellation");
+  }
+}
+
+async function changeOrderStatus(ref: { id: string } | { orderNumber: string }, status: OrderStatus, actor: StatusActor, reason?: string) {
+  return orderTransaction(async (tx) => {
+    await assertActor(tx, actor);
+    const order = await tx.order.findFirst({
+      where: { ...ref, ...(actor.kind === "customer" ? customerOrderOwnership(actor.userId) : {}) },
+      select: { id: true, status: true, paymentStatus: true, inventoryVersion: true },
+    });
+    if (!order) throw new Error("Order not found");
+    if (actor.kind === "customer" && (status !== "CANCELLED" || !["PENDING", "CONFIRMED"].includes(order.status))) {
+      throw new Error("This order can no longer be cancelled online");
+    }
+    if (!ALLOWED_TRANSITIONS[order.status].includes(status)) throw new Error(`Cannot change status from ${order.status} to ${status}`);
+    if (status === "CANCELLED" && (order.paymentStatus === "PAID" || order.paymentStatus === "REFUNDED")) {
+      throw new Error("This order needs payment review before cancellation");
+    }
+    const now = new Date();
+    const result = await tx.order.updateMany({
+      where: { id: order.id, status: order.status, paymentStatus: order.paymentStatus },
+      data: {
+        status,
+        ...(status === "CONFIRMED" ? { confirmedAt: now } : {}),
+        ...(status === "SHIPPED" ? { shippedAt: now } : {}),
+        ...(status === "DELIVERED" ? { deliveredAt: now } : {}),
+        ...(status === "CANCELLED" ? { cancelledAt: now, cancelReason: reason ?? null } : {}),
+      },
+    });
+    if (!result.count) throw new Error("Order state changed. Refresh and try again.");
+    if (status === "CANCELLED") {
+      const items = await tx.orderItem.findMany({ where: { orderId: order.id }, select: {
+        productId: true, variantId: true, variant: true, quantity: true,
+      } });
+      if (!items.length) throw new Error("This order needs a manual inventory review before cancellation");
+      await restoreInventory(tx, items, order.inventoryVersion);
+    }
+    await tx.auditLog.create({ data: {
+      userId: actor.userId, action: "ORDER_STATUS_CHANGE", entity: "Order", entityId: order.id,
+      detail: { from: order.status, to: status },
+    } });
+    return { id: order.id, status };
   });
-  await writeAuditLog({
-    userId: adminId,
-    action: "ORDER_PAYMENT_STATUS_CHANGE",
-    entity: "Order",
-    entityId: id,
-    detail: { paymentStatus },
+}
+
+export async function updateOrderStatus(id: string, status: OrderStatus, adminId: string, reason?: string) {
+  return changeOrderStatus({ id }, status, { kind: "admin", userId: adminId }, reason);
+}
+
+export async function cancelCustomerOrder(userId: string, orderNumber: string) {
+  return changeOrderStatus({ orderNumber }, "CANCELLED", { kind: "customer", userId }, "Cancelled by customer");
+}
+
+export async function updatePaymentStatus(id: string, next: PaymentStatus, adminId: string) {
+  return orderTransaction(async (tx) => {
+    await assertActor(tx, { kind: "admin", userId: adminId });
+    const order = await tx.order.findUnique({ where: { id }, select: { status: true, paymentStatus: true, total: true } });
+    if (!order) throw new Error("Order not found");
+    const valid = (order.status === "DELIVERED" && ((["PENDING", "FAILED"].includes(order.paymentStatus) && next === "PAID") ||
+      (order.paymentStatus === "PAID" && next === "PENDING"))) ||
+      (order.status === "RETURNED" && order.paymentStatus === "PAID" && next === "REFUNDED");
+    if (!valid) throw new Error("This payment change is not allowed for the current order status");
+    const updated = await tx.order.updateMany({ where: { id, status: order.status, paymentStatus: order.paymentStatus }, data: { paymentStatus: next } });
+    if (!updated.count) throw new Error("Order state changed. Refresh and try again.");
+    await tx.auditLog.create({ data: {
+      userId: adminId, action: "ORDER_PAYMENT_STATUS_CHANGE", entity: "Order", entityId: id,
+      detail: { from: order.paymentStatus, to: next, orderTotal: order.total.toFixed(2), method: "COD" },
+    } });
+    return { id, paymentStatus: next };
   });
-  return updated;
 }

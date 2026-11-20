@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, createHmac, randomBytes } from "node:crypto";
 
 const RECEIPT_LIFETIME_MS = 30 * 60 * 1000;
 const RECEIPT_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
@@ -12,7 +12,7 @@ export type GuestReceiptProof = {
 
 export type CheckoutBuyer =
   | { kind: "customer"; userId: string }
-  | { kind: "guest"; receipt: GuestReceiptProof };
+  | { kind: "guest"; receipt: GuestReceiptProof; checkoutScope?: string };
 
 export type ReceiptViewer =
   | { kind: "customer"; userId: string }
@@ -22,13 +22,31 @@ function hashReceiptToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
 }
 
-export function createGuestReceipt(now = new Date()) {
-  const token = randomBytes(32).toString("base64url");
+export function createGuestReceipt(now = new Date(), token = randomBytes(32).toString("base64url")) {
   const proof: GuestReceiptProof = {
     guestReceiptTokenHash: hashReceiptToken(token),
     guestReceiptExpiresAt: new Date(now.getTime() + RECEIPT_LIFETIME_MS),
   };
   return { token, proof };
+}
+
+export const GUEST_CHECKOUT_COOKIE = "shopbd_checkout_session";
+
+export function isGuestCheckoutSecret(value: string | undefined): value is string {
+  return typeof value === "string" && RECEIPT_TOKEN_PATTERN.test(value);
+}
+
+export function createGuestCheckoutSecret() {
+  return randomBytes(32).toString("base64url");
+}
+
+export function guestCheckoutScope(secret: string) {
+  return createHash("sha256").update(`checkout-scope:${secret}`).digest("hex");
+}
+
+export function guestReceiptForCheckout(secret: string, idempotencyKey: string) {
+  const token = createHmac("sha256", secret).update(`shopbd-order-receipt:${idempotencyKey}`).digest("base64url");
+  return createGuestReceipt(new Date(), token);
 }
 
 export function guestReceiptPath(orderNumber: string) {

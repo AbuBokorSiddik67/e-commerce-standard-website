@@ -193,6 +193,7 @@ export async function createDeliveryZone(data: {
   name: string;
   charge: number;
   estimatedDays?: string;
+  districts: string[];
   isActive: boolean;
 }) {
   return prisma.deliveryZone.create({
@@ -200,6 +201,7 @@ export async function createDeliveryZone(data: {
       name: data.name,
       charge: data.charge,
       estimatedDays: data.estimatedDays || null,
+      districts: data.districts,
       isActive: data.isActive,
     },
   });
@@ -209,11 +211,12 @@ export async function updateDeliveryZone(id: string, data: {
   name?: string;
   charge?: number;
   estimatedDays?: string | null;
+  districts?: string[];
   isActive?: boolean;
 }) {
   return prisma.deliveryZone.update({ where: { id }, data });
 }
 
 export async function deleteDeliveryZone(id: string) {
-  return prisma.deliveryZone.delete({ where: { id } });
+  return prisma.deliveryZone.update({ where: { id }, data: { isActive: false } });
 }

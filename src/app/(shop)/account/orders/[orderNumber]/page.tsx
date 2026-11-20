@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { AppError } from "@/components/shared/app-error";
 import { attempt } from "@/lib/errors";
 
+import { CancelOrderButton } from "@/components/customer/cancel-order-button";
+
 export const dynamic = "force-dynamic";
 
 export default async function AccountOrderDetailPage({
@@ -116,6 +118,8 @@ export default async function AccountOrderDetailPage({
               <span>{formatCurrency(Number(order.total))}</span>
             </div>
           </div>
+          {(["PENDING", "CONFIRMED"].includes(order.status) && ["PENDING", "FAILED"].includes(order.paymentStatus)) &&
+            <CancelOrderButton orderNumber={order.orderNumber} />}
           <Button asChild variant="outline" className="w-full">
             <Link href={`/track-order?order=${encodeURIComponent(order.orderNumber)}&phone=${encodeURIComponent(order.phone)}`}>
               Track order
