@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import { customerOrderOwnership } from "./order-access";
 import type { RegisterInput, PasswordResetInput } from "@/lib/validations/auth";
 import type { ProfileInput, AddressInput } from "@/lib/validations/account";
 
@@ -114,29 +115,17 @@ export async function setDefaultCustomerAddress(userId: string, id: string) {
   ]);
 }
 
-async function customerOrderWhere(userId: string) {
-  const customer = await prisma.customer.findUnique({ where: { userId } });
-  return {
-    OR: [
-      { userId },
-      ...(customer ? [{ customerId: customer.id }] : []),
-    ],
-  };
-}
-
 export async function listCustomerOrders(userId: string) {
-  const where = await customerOrderWhere(userId);
   return prisma.order.findMany({
-    where,
+    where: customerOrderOwnership(userId),
     orderBy: { placedAt: "desc" },
     include: { items: true },
   });
 }
 
 export async function getCustomerOrder(userId: string, orderNumber: string) {
-  const where = await customerOrderWhere(userId);
   return prisma.order.findFirst({
-    where: { orderNumber, ...where },
+    where: { orderNumber, ...customerOrderOwnership(userId) },
     include: { items: true, zone: true },
   });
 }

@@ -335,6 +335,8 @@ model Order {
   couponId        String?
   coupon          Coupon?       @relation(fields: [couponId], references: [id])
   idempotencyKey  String?       @unique
+  guestReceiptTokenHash String?
+  guestReceiptExpiresAt DateTime?
   placedAt        DateTime      @default(now())
   confirmedAt     DateTime?
   shippedAt       DateTime?

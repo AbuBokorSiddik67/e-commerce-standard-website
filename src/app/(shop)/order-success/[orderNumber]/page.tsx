@@ -1,10 +1,17 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { CheckCircle2, Package, Truck, MapPin } from "lucide-react";
-import { prisma } from "@/lib/prisma";
+import { CheckCircle2, Package, Truck } from "lucide-react";
+import type { Metadata } from "next";
+import { cookies } from "next/headers";
+import { auth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { AppError } from "@/components/shared/app-error";
 import { attempt } from "@/lib/errors";
+import { GUEST_RECEIPT_COOKIE } from "@/server/services/order-access";
+import { getOrderReceipt } from "@/server/services/order.service";
+
+export const dynamic = "force-dynamic";
+export const metadata: Metadata = { robots: { index: false, follow: false, noarchive: true } };
 
 export default async function OrderSuccessPage({
   params,
@@ -12,12 +19,16 @@ export default async function OrderSuccessPage({
   params: Promise<{ orderNumber: string }>;
 }) {
   const { orderNumber } = await params;
-  const orderResult = await attempt("orderSuccess.load", () =>
-    prisma.order.findUnique({
-      where: { orderNumber },
-      include: { items: true, zone: true },
-    }),
-  );
+  const orderResult = await attempt("orderSuccess.load", async () => {
+    const session = await auth();
+    const user = session?.user;
+    if (session && (user?.role !== "CUSTOMER" || !user.id)) return null;
+
+    if (user) return getOrderReceipt(orderNumber, { kind: "customer", userId: user.id });
+
+    const token = (await cookies()).get(GUEST_RECEIPT_COOKIE)?.value;
+    return getOrderReceipt(orderNumber, { kind: "guest", token });
+  });
   if (!orderResult.ok) {
     return (
       <AppError
@@ -33,7 +44,7 @@ export default async function OrderSuccessPage({
     <div className="container-page py-12">
       <div className="mx-auto max-w-2xl text-center">
         <CheckCircle2 className="mx-auto h-16 w-16 text-green-500" />
-        <h1 className="mt-4 text-3xl font-bold">Order Confirmed!</h1>
+        <h1 className="mt-4 text-3xl font-bold">Order received</h1>
         <p className="mt-2 text-muted-foreground">Thank you for your order. We'll call you to confirm shortly.</p>
 
         <div className="mt-8 rounded-lg border p-6 text-left">
@@ -58,13 +69,9 @@ export default async function OrderSuccessPage({
           </div>
 
           <div className="space-y-2 border-t pt-4 text-sm">
-            <div className="flex items-start gap-2">
-              <MapPin className="mt-0.5 h-4 w-4 text-muted-foreground" />
-              <span>{order.shippingAddress}, {order.city}, {order.district}</span>
-            </div>
             <div className="flex items-center gap-2">
               <Truck className="h-4 w-4 text-muted-foreground" />
-              <span>{order.zone?.name ?? "Standard delivery"} · Cash on Delivery</span>
+              <span>Cash on Delivery</span>
             </div>
             <div className="flex items-center gap-2">
               <Package className="h-4 w-4 text-muted-foreground" />

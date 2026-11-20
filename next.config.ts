@@ -30,6 +30,14 @@ const nextConfig: NextConfig = {
           },
         ],
       },
+      {
+        source: "/order-success/:orderNumber",
+        headers: [
+          { key: "Cache-Control", value: "private, no-store, max-age=0, must-revalidate" },
+          { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive" },
+          { key: "Referrer-Policy", value: "no-referrer" },
+        ],
+      },
     ];
   },
 };
