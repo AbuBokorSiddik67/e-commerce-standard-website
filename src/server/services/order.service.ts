@@ -4,10 +4,20 @@ import { writeAuditLog } from "@/lib/audit";
 import { validateCoupon } from "./content.service";
 import type { CheckoutInput } from "@/lib/validations/customer";
 import type { Prisma } from "@prisma/client";
+import { isOwnedCheckoutReplay, receiptWhere, type CheckoutBuyer, type ReceiptViewer } from "./order-access";
 
-export async function createOrder(input: CheckoutInput, userId?: string) {
-  const existing = await prisma.order.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
-  if (existing) return existing;
+export async function createOrder(input: CheckoutInput, buyer: CheckoutBuyer) {
+  const userId = buyer.kind === "customer" ? buyer.userId : null;
+  const existing = await prisma.order.findUnique({
+    where: { idempotencyKey: input.idempotencyKey },
+    select: { orderNumber: true, userId: true },
+  });
+  if (existing) {
+    if (!isOwnedCheckoutReplay(buyer, existing.userId)) {
+      throw new Error("Unable to resume this checkout. Check your order status or contact support.");
+    }
+    return { orderNumber: existing.orderNumber };
+  }
 
   const productIds = input.items.map((i) => i.productId);
   const products = await prisma.product.findMany({ where: { id: { in: productIds }, isActive: true } });
@@ -100,27 +110,32 @@ export async function createOrder(input: CheckoutInput, userId?: string) {
       }
     }
 
-    let customerId: string | null = null;
-    const existingCustomer = await tx.customer.findFirst({
-      where: { OR: [{ phone: input.phone }, ...(userId ? [{ userId }] : [])] },
-    });
-    if (existingCustomer) {
-      customerId = existingCustomer.id;
-      if (userId && !existingCustomer.userId) {
-        await tx.customer.update({ where: { id: customerId }, data: { userId } });
-      }
-    } else {
-      const customer = await tx.customer.create({
-        data: { fullName: input.fullName, phone: input.phone, email: input.email || null, userId: userId ?? null },
-      });
+    const contact = { fullName: input.fullName, phone: input.phone, email: input.email || null };
+    // Delivery contact details are not proof of account identity. Do not reuse or
+    // attach a guest record, even when its phone matches the current delivery phone.
+    let customerId: string;
+    if (userId === null) {
+      const customer = await tx.customer.create({ data: contact, select: { id: true } });
       customerId = customer.id;
+    } else {
+      const customer = await tx.customer.findUnique({ where: { userId }, select: { id: true } });
+      if (customer) {
+        customerId = customer.id;
+      } else {
+        // A concurrent first checkout can create this row; never update or reassign it.
+        await tx.customer.createMany({ data: { ...contact, userId }, skipDuplicates: true });
+        const linked = await tx.customer.findUniqueOrThrow({ where: { userId }, select: { id: true } });
+        customerId = linked.id;
+      }
     }
 
     return tx.order.create({
       data: {
         orderNumber: generateOrderNumber(),
         customerId,
-        userId: userId ?? null,
+        userId,
+        guestReceiptTokenHash: buyer.kind === "guest" ? buyer.receipt.guestReceiptTokenHash : null,
+        guestReceiptExpiresAt: buyer.kind === "guest" ? buyer.receipt.guestReceiptExpiresAt : null,
         fullName: input.fullName,
         phone: input.phone,
         email: input.email || null,
@@ -153,7 +168,7 @@ export async function createOrder(input: CheckoutInput, userId?: string) {
           })),
         },
       },
-      include: { items: true },
+      select: { orderNumber: true },
     });
   });
 
@@ -162,6 +177,21 @@ export async function createOrder(input: CheckoutInput, userId?: string) {
   }
 
   return order;
+}
+
+export async function getOrderReceipt(orderNumber: string, viewer: ReceiptViewer, now = new Date()) {
+  const where = receiptWhere(orderNumber, viewer, now);
+  if (!where) return null;
+
+  return prisma.order.findFirst({
+    where,
+    select: {
+      orderNumber: true,
+      status: true,
+      total: true,
+      items: { select: { id: true, name: true, variant: true, quantity: true, lineTotal: true } },
+    },
+  });
 }
 
 export async function listOrders(params: {

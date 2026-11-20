@@ -5,13 +5,14 @@ import { createOrder, getOrderByNumberAndPhone } from "@/server/services/order.s
 import { validateCoupon } from "@/server/services/content.service";
 import { auth } from "@/lib/auth";
 import { rateLimit } from "@/lib/rate-limit";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { actionErrorMessage } from "@/lib/errors";
 import { calculateDiscount } from "@/lib/utils";
+import { createGuestReceipt, GUEST_RECEIPT_COOKIE, guestReceiptPath } from "@/server/services/order-access";
 
-type ActionResult = { success: boolean; error?: string; orderNumber?: string; orderId?: string };
+type ActionResult = { success: boolean; error?: string; orderNumber?: string };
 
 async function clientKey(prefix: string) {
   const h = await headers();
@@ -32,13 +33,28 @@ export async function placeOrderAction(input: unknown): Promise<ActionResult> {
 
   try {
     const session = await auth();
-    if (session?.user?.role === "ADMIN") {
-      return { success: false, error: "Admins cannot place orders" };
+    const user = session?.user;
+    if (session && (user?.role !== "CUSTOMER" || !user.id)) {
+      return { success: false, error: "Only customers and guests can place orders" };
     }
 
-    const order = await createOrder(parsed.data, session?.user?.id);
+    let orderNumber: string;
+    if (user) {
+      ({ orderNumber } = await createOrder(parsed.data, { kind: "customer", userId: user.id }));
+    } else {
+      const grant = createGuestReceipt();
+      const cookieStore = await cookies();
+      ({ orderNumber } = await createOrder(parsed.data, { kind: "guest", receipt: grant.proof }));
+      cookieStore.set(GUEST_RECEIPT_COOKIE, grant.token, {
+        path: guestReceiptPath(orderNumber),
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        expires: grant.proof.guestReceiptExpiresAt,
+      });
+    }
     revalidatePath("/admin/orders");
-    return { success: true, orderNumber: order.orderNumber, orderId: order.id };
+    return { success: true, orderNumber };
   } catch (e) {
     return { success: false, error: actionErrorMessage("customer.placeOrder", e, "Failed to place order") };
   }
