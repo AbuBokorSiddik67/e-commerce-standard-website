@@ -1,3 +1,4 @@
+import { ChangePasswordForm } from "@/components/shared/change-password-form";
 import { requireAdmin } from "@/lib/auth-guard";
 import { getStoreSettings, getAllDeliveryZones } from "@/server/repositories/settings.repo";
 import { SettingsForm } from "@/components/admin/settings-form";
@@ -61,6 +62,7 @@ export default async function AdminSettingsPage() {
           isActive: z.isActive,
         }))}
       />
+      <ChangePasswordForm admin />
     </div>
   );
 }

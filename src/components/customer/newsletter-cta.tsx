@@ -1,5 +1,6 @@
 "use client";
 
+import { safeLink } from "@/lib/safe-urls";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,7 +22,7 @@ export function NewsletterCta({
   settings: NewsletterSettings;
 }) {
   const s = (section.settings ?? {}) as { whatsappUrl?: string; message?: string };
-  const whatsappUrl = s.whatsappUrl || settings.whatsappUrl;
+  const whatsappUrl = safeLink(s.whatsappUrl || settings.whatsappUrl, false);
   const [loading, setLoading] = useState(false);
   const [consent, setConsent] = useState(false);
 

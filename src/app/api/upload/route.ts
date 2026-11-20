@@ -1,90 +1,81 @@
 import { NextResponse } from "next/server";
-import { randomUUID } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { lstat, mkdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { auth } from "@/lib/auth";
-import { writeAuditLog } from "@/lib/audit";
-import { IMAGE_ALLOWED_TYPES, IMAGE_MAX_SIZE } from "@/lib/constants";
 import { logError } from "@/lib/errors";
+import { prisma } from "@/lib/prisma";
+import { allowPublicRequest } from "@/lib/shared-rate-limit";
+import { BodyLimitError, isSameOrigin, readBoundedBody } from "@/lib/request-security";
+import { MAX_UPLOAD_BODY, MAX_UPLOAD_FILES, normalizeImage } from "@/server/services/upload-image";
 
-const EXT_BY_TYPE: Record<string, string> = {
-  "image/jpeg": "jpg",
-  "image/jpg": "jpg",
-  "image/png": "png",
-  "image/webp": "webp",
-};
+export const runtime = "nodejs";
+const failure = (error: string, status: number) => NextResponse.json({ error }, { status, headers: { "Cache-Control": "private, no-store" } });
+
+async function authorize(req: Request) {
+  const session = await auth();
+  if (!session?.user?.id) return failure("Unauthorized", 401);
+  if (session.user.role !== "ADMIN" || !isSameOrigin(req)) return failure("Forbidden", 403);
+  return session.user.id;
+}
 
 export async function POST(req: Request) {
+  const localFiles: string[] = [];
+  const cloudKeys: string[] = [];
+  let deleteCloud: ((keys: string[]) => Promise<unknown>) | undefined;
   try {
-    const session = await auth();
-    if (!session?.user || session.user.role !== "ADMIN") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const admin = await authorize(req);
+    if (typeof admin !== "string") return admin;
+    if (!(await allowPublicRequest("image-upload", req.headers, 12, 60, admin))) return failure("Try again shortly", 429);
+    const configured = Boolean(process.env.UPLOADTHING_TOKEN);
+    const type = req.headers.get("content-type");
+    if (!type || !/^multipart\/form-data\s*;/i.test(type)) return failure("Invalid upload request", 415);
+    const bytes = await readBoundedBody(req, MAX_UPLOAD_BODY);
+    const form = await new Response(bytes, { headers: { "content-type": type } }).formData().catch(() => null);
+    const entries = form && [...form.entries()];
+    if (!entries?.length || entries.length > MAX_UPLOAD_FILES || entries.some(([key]) => key !== "files")) return failure("Select one to four images", 400);
+    const files: File[] = [];
+    for (const [, value] of entries) {
+      const image = await normalizeImage(value);
+      if (!image) return failure("Use valid JPEG, PNG or WebP images up to 4 MB and 4096 pixels per edge", 400);
+      files.push(image);
     }
-
-    const formData = await req.formData();
-    const files = formData.getAll("files") as File[];
-    if (!files.length) {
-      return NextResponse.json({ error: "No files provided" }, { status: 400 });
-    }
-
+    if (!configured && process.env.NODE_ENV === "production") return failure("Image storage is not configured", 503);
     const urls: string[] = [];
-
-    const uploadThingConfigured = Boolean(
-      process.env.UPLOADTHING_TOKEN ||
-        (process.env.UPLOADTHING_SECRET && process.env.UPLOADTHING_APP_ID),
-    );
-
-    for (const file of files) {
-      if (!IMAGE_ALLOWED_TYPES.includes(file.type)) {
-        return NextResponse.json(
-          { error: `File type ${file.type} not allowed. Use JPEG, PNG, or WebP.` },
-          { status: 400 },
-        );
-      }
-      if (file.size > IMAGE_MAX_SIZE) {
-        return NextResponse.json({ error: "File exceeds 4MB limit" }, { status: 400 });
-      }
-    }
-
-    if (uploadThingConfigured) {
+    if (configured) {
       const { UTApi } = await import("uploadthing/server");
-      const utapi = new UTApi();
-      const results = await utapi.uploadFiles(files);
+      const ut = new UTApi();
+      deleteCloud = (keys) => ut.deleteFiles(keys);
+      const results = await ut.uploadFiles(files);
       for (const result of results) {
-        if (result.error) {
-          return NextResponse.json({ error: result.error.message ?? "Upload failed" }, { status: 500 });
-        }
-        if (result.data?.url) urls.push(result.data.url);
+        if (result.data) { cloudKeys.push(result.data.key); urls.push(result.data.ufsUrl); }
       }
+      if (urls.length !== files.length) throw new Error("Storage rejected one or more files");
     } else {
-      // No external storage configured: save files locally under public/uploads
-      // and return a short URL. Never return base64 data URLs here, because they
-      // are later sent through Server Actions and exceed the 1 MB body limit.
-      const uploadDir = path.join(process.cwd(), "public", "uploads");
-      await mkdir(uploadDir, { recursive: true });
-
+      const directory = path.join(process.cwd(), "public", "uploads");
+      await mkdir(directory, { recursive: true });
+      if (!(await lstat(directory)).isDirectory()) throw new Error("Unsafe upload directory");
       for (const file of files) {
-        const ext = EXT_BY_TYPE[file.type] ?? "bin";
-        const filename = `${randomUUID()}.${ext}`;
-        const buffer = Buffer.from(await file.arrayBuffer());
-        await writeFile(path.join(uploadDir, filename), buffer);
-        urls.push(`/uploads/${filename}`);
+        const target = path.join(directory, file.name);
+        await writeFile(target, new Uint8Array(await file.arrayBuffer()), { flag: "wx", mode: 0o644 });
+        localFiles.push(target);
+        urls.push(`/uploads/${file.name}`);
       }
     }
-
-    await writeAuditLog({
-      userId: session.user.id,
-      action: "IMAGE_UPLOAD",
-      entity: "Image",
-      detail: { count: urls.length },
-    });
-
-    return NextResponse.json({ urls });
+    await prisma.auditLog.create({ data: { userId: admin, action: "IMAGE_UPLOAD", entity: "Image", detail: { count: urls.length } } });
+    return NextResponse.json({ urls }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
+    if (error instanceof BodyLimitError) return failure("Images exceed the upload limit", 413);
+    const results = await Promise.allSettled([...localFiles.map((file) => unlink(file)), ...(cloudKeys.length && deleteCloud ? [deleteCloud(cloudKeys)] : [])]);
+    if (results.some((result) => result.status === "rejected")) logError("api.upload.cleanup", new Error());
     logError("api.upload", error);
-    return NextResponse.json(
-      { error: "Upload failed. Please try again with a smaller image." },
-      { status: 500 },
-    );
+    return failure("Upload failed. Please try again.", 500);
   }
+}
+
+export async function DELETE(req: Request) {
+  const authorization = await authorize(req);
+  if (typeof authorization !== "string") return authorization;
+  // Media may be shared by existing products/receipts. Authorized admin edits
+  // can detach references. Physical deletion is restricted to storage operators.
+  return failure("Direct file deletion is not supported", 405);
 }

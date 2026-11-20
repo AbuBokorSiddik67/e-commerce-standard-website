@@ -27,18 +27,11 @@ export default function AdminLoginPage() {
       const res = await signIn("credentials", {
         email: data.email,
         password: data.password,
+        portal: "admin",
         redirect: false,
       });
-      if (res?.error) {
+      if (!res?.ok || res.error) {
         toast.error("Invalid email or password");
-        return;
-      }
-      // Verify the user is an admin before routing
-      const check = await fetch("/api/auth/session");
-      const session = await check.json();
-      if (session?.user?.role !== "ADMIN") {
-        await fetch("/api/auth/signout", { method: "POST" });
-        toast.error("This account does not have admin access");
         return;
       }
       router.push("/admin/dashboard");

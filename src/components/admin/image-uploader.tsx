@@ -20,6 +20,7 @@ export function ImageUploader({
   async function handleFiles(files: FileList | null) {
     if (!files?.length) return;
     const arr = Array.from(files);
+    if (arr.length > 4) { toast.error("Select up to four images per upload"); return; }
     for (const file of arr) {
       if (!IMAGE_ALLOWED_TYPES.includes(file.type)) {
         toast.error(`${file.name}: only JPEG, PNG, or WebP images are allowed`);

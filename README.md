@@ -55,9 +55,9 @@ Production-ready Cash on Delivery (COD) e-commerce storefront and admin dashboar
    - `DATABASE_URL` — PostgreSQL (Neon pooler) connection string.
    - `DIRECT_URL` — direct database connection for migrations (if using Neon).
    - `AUTH_SECRET` — generate with `openssl rand -base64 32`.
-   - `NEXTAUTH_URL` — e.g. `http://localhost:3000`.
+   - `AUTH_URL` — e.g. `http://localhost:3000`; use the canonical HTTPS origin in production. Set `AUTH_TRUST_HOST=true` behind a trusted ingress.
    - Optional: `NEXT_PUBLIC_APP_URL` for canonical URLs/sitemap.
-   - Optional: `UPLOADTHING_SECRET`, `UPLOADTHING_APP_ID`.
+   - `UPLOADTHING_TOKEN` for production uploads; see `.env.example` for recovery email and additional image hosts.
 
 3. Generate Prisma client and apply migrations:
    ```bash
@@ -67,12 +67,10 @@ Production-ready Cash on Delivery (COD) e-commerce storefront and admin dashboar
 
 4. Seed demo data (development only):
    ```bash
-   npm run db:seed
+   SHOPBD_ALLOW_DEMO_SEED=1 npm run db:seed
    ```
 
-   Default admin (change immediately):
-   - Email: `admin@shopbd.com`
-   - Password: `admin12345`
+   Provision an admin separately with `npm run auth:provision-admin`, an explicit `SHOPBD_ADMIN_EMAIL`, and a 16+ character password piped from a secret manager or hidden prompt. The demo seed creates no admin.
 
 5. Start the dev server:
    ```bash
@@ -104,8 +102,8 @@ Production-ready Cash on Delivery (COD) e-commerce storefront and admin dashboar
    npx prisma migrate deploy
    ```
 4. Build command: `npm run build`.
-5. Do not run the seed script against production unless you intend to create demo data.
-6. Add your production domain to `NEXT_PUBLIC_APP_URL` and `NEXTAUTH_URL`.
+5. Do not run the demo seed in deployed environments. It is restricted to opted-in, disposable loopback databases; see `PHASE_3_SECURITY_REPORT.md` for provisioning and rotation.
+6. Add your production domain to `NEXT_PUBLIC_APP_URL` and `AUTH_URL`.
 
 ## Admin Quick Guide
 

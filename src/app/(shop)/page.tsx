@@ -1,3 +1,4 @@
+import { safeLink } from "@/lib/safe-urls";
 import { CategoryShowcase } from '@/components/customer/category-showcase';
 import { HeroBanner } from '@/components/customer/hero-banner';
 import { NewsletterCta } from '@/components/customer/newsletter-cta';
@@ -172,9 +173,9 @@ function OfferBanner({ banners }: { banners: Banner[] | undefined }) {
             {banner.subtitle && (
               <p className="mt-1 text-xs sm:text-sm">{banner.subtitle}</p>
             )}
-            {banner.ctaText && banner.ctaLink && (
+            {banner.ctaText && safeLink(banner.ctaLink) && (
               <Button asChild className="mt-2 h-8 px-3 text-xs" size="sm">
-                <Link href={banner.ctaLink}>{banner.ctaText}</Link>
+                <Link href={safeLink(banner.ctaLink) ?? "/products"}>{banner.ctaText}</Link>
               </Button>
             )}
           </div>

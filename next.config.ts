@@ -1,25 +1,24 @@
 import type { NextConfig } from "next";
+import { mediaHosts } from "./src/lib/safe-urls";
 
 const nextConfig: NextConfig = {
   typescript: { ignoreBuildErrors: false },
   experimental: {
     serverActions: {
-      // Safeguard for admin forms. Images are stored as short /uploads URLs,
-      // but older records may still hold legacy base64 data URLs.
-      bodySizeLimit: "10mb",
+      bodySizeLimit: "1mb",
     },
   },
   images: {
-    remotePatterns: [
-      { protocol: "https", hostname: "**" },
-      { protocol: "http", hostname: "**" },
-    ],
+    remotePatterns: mediaHosts.map((hostname) => ({ protocol: "https", hostname, port: "" })),
+    maximumRedirects: 0,
+    dangerouslyAllowLocalIP: false,
   },
   async headers() {
     return [
       {
         source: "/(.*)",
         headers: [
+          { key: "Content-Security-Policy", value: "base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'" },
           { key: "X-Frame-Options", value: "DENY" },
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
@@ -28,6 +27,14 @@ const nextConfig: NextConfig = {
             key: "Permissions-Policy",
             value: "camera=(), microphone=(), geolocation=()",
           },
+        ],
+      },
+      {
+        source: "/reset-password",
+        headers: [
+          { key: "Cache-Control", value: "private, no-store" },
+          { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive" },
+          { key: "Referrer-Policy", value: "no-referrer" },
         ],
       },
       {

@@ -1,6 +1,6 @@
 import { unstable_rethrow } from "next/navigation";
 
-const isProduction = process.env.NODE_ENV === "production";
+export class PublicError extends Error {}
 
 const PRISMA_CONNECTION_CODES = new Set([
   "P1000",
@@ -29,25 +29,11 @@ export function isPrismaError(error: unknown): boolean {
   );
 }
 
-/**
- * Logs an error with enough context to debug it later, without ever throwing.
- */
-export function logError(
-  scope: string,
-  error: unknown,
-  context?: Record<string, unknown>,
-): void {
-  const details =
-    error instanceof Error
-      ? {
-          name: error.name,
-          message: error.message,
-          stack: isProduction ? undefined : error.stack,
-          ...context,
-        }
-      : { value: error, ...context };
-
-  console.error(`[store:${scope}]`, details);
+/** Log classification only. Never serialize exceptions, request values, URLs or stacks. */
+export function logError(scope: string, error: unknown): void {
+  const code = errorCode(error);
+  const kind = code && /^P\d{4}$/.test(code) ? code : error instanceof PublicError ? "rejected" : "unexpected";
+  if (kind !== "rejected") console.error(`[store:${scope}]`, { kind });
 }
 
 /**
@@ -77,7 +63,7 @@ export function friendlyError(
     return fallback;
   }
 
-  if (error instanceof Error && error.message) {
+  if (error instanceof PublicError && error.message) {
     const message = error.message.trim();
     if (message.length > 0 && message.length <= 160 && !message.includes("\n")) {
       return message;

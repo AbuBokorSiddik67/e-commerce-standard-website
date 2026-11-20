@@ -25,7 +25,8 @@ function createPrismaClient() {
 
   return new PrismaClient({
     adapter,
-    log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
+    // Prisma error text can contain request values; report sanitized metadata at boundaries.
+    log: [],
   });
 }
 

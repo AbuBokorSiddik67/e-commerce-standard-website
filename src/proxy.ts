@@ -8,14 +8,12 @@ export default auth((req) => {
   const { pathname } = req.nextUrl;
 
   if (pathname === "/admin/login") {
-    if (req.auth?.user?.role === "ADMIN") {
-      return NextResponse.redirect(new URL("/admin/dashboard", req.url));
-    }
+    // Do not redirect using an optimistic/stale JWT: the server may have revoked it.
     return NextResponse.next();
   }
 
   if (pathname.startsWith("/admin")) {
-    if (!req.auth || req.auth.user.role !== "ADMIN") {
+    if (!req.auth?.user?.id || req.auth.user.role !== "ADMIN") {
       return NextResponse.redirect(new URL("/admin/login", req.url));
     }
   }
