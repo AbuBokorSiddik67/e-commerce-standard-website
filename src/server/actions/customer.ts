@@ -3,11 +3,11 @@
 import { cartQuoteSchema, checkoutQuoteSchema, checkoutSchema, trackOrderSchema, reviewSchema, newsletterSchema } from "@/lib/validations/customer";
 import { createOrder, getOrderByNumberAndPhone } from "@/server/services/order.service";
 import { auth } from "@/lib/auth";
-import { rateLimit } from "@/lib/rate-limit";
+import { allowPublicRequest } from "@/lib/shared-rate-limit";
 import { cookies, headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { actionErrorMessage } from "@/lib/errors";
+import { actionErrorMessage, PublicError } from "@/lib/errors";
 import {
   createGuestCheckoutSecret, GUEST_CHECKOUT_COOKIE, guestCheckoutScope, guestReceiptForCheckout,
   GUEST_RECEIPT_COOKIE, guestReceiptPath, isGuestCheckoutSecret,
@@ -17,22 +17,16 @@ import { orderTransaction } from "@/server/services/order-transaction";
 
 type ActionResult = { success: boolean; error?: string; orderNumber?: string; receiptExpired?: boolean };
 
-async function clientKey(prefix: string) {
-  const h = await headers();
-  const ip = h.get("x-forwarded-for") ?? "unknown";
-  return `${prefix}:${ip}`;
-}
-
 async function checkoutViewer(provision: boolean) {
   const session = await auth();
   if (session) {
-    if (!session.user?.id || session.user.role !== "CUSTOMER") throw new Error("Only customers and guests can check out");
+    if (!session.user?.id || session.user.role !== "CUSTOMER") throw new PublicError("Only customers and guests can check out");
     return { kind: "customer", userId: session.user.id } as const;
   }
   const jar = await cookies();
   const existing = jar.get(GUEST_CHECKOUT_COOKIE)?.value;
   if (isGuestCheckoutSecret(existing)) return { kind: "guest", secret: existing, jar } as const;
-  if (!provision) throw new Error("Your checkout session expired. Refresh your quote and try again.");
+  if (!provision) throw new PublicError("Your checkout session expired. Refresh your quote and try again.");
   const secret = createGuestCheckoutSecret();
   jar.set(GUEST_CHECKOUT_COOKIE, secret, {
     path: "/", httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", maxAge: 30 * 24 * 60 * 60,
@@ -47,8 +41,8 @@ function viewerKey(viewer: Awaited<ReturnType<typeof checkoutViewer>>) {
 export async function quoteCheckoutAction(input: unknown) {
   const parsed = checkoutQuoteSchema.safeParse(input);
   if (!parsed.success) return { success: false as const, error: parsed.error.issues[0]?.message ?? "Invalid input" };
-  if (!rateLimit(await clientKey("checkout-quote"), 25, 60_000).success) return { success: false as const, error: "Too many quote requests. Try again shortly." };
   try {
+    if (!(await allowPublicRequest("checkout-quote", await headers(), 25, 60))) return { success: false as const, error: "Too many quote requests. Try again shortly." };
     const viewer = await checkoutViewer(true);
     const quote = await orderTransaction((tx) => priceCheckout(tx, parsed.data, viewerKey(viewer)));
     return { success: true as const, quote: quote.summary };
@@ -61,9 +55,8 @@ export async function placeOrderAction(input: unknown): Promise<ActionResult> {
   const parsed = checkoutSchema.safeParse(input);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
   if (!parsed.data.expectedQuote) return { success: false, error: "Review the order total before submitting" };
-  if (!rateLimit(await clientKey("checkout"), 8, 60_000).success) return { success: false, error: "Too many attempts. Please try again in a minute." };
-
   try {
+    if (!(await allowPublicRequest("checkout", await headers(), 8, 60))) return { success: false, error: "Too many attempts. Please try again in a minute." };
     const viewer = await checkoutViewer(false);
     let orderNumber: string;
     if (viewer.kind === "customer") {
@@ -96,11 +89,10 @@ export async function trackOrderAction(input: unknown) {
   if (!parsed.success) {
     return { success: false as const, error: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
-  const limiter = rateLimit(await clientKey("track"), 20, 60_000);
-  if (!limiter.success) {
+  try {
+    if (!(await allowPublicRequest("track", await headers(), 20, 60, parsed.data.orderNumber.toUpperCase()))) {
     return { success: false as const, error: "Too many attempts. Please try again later." };
   }
-  try {
     const order = await getOrderByNumberAndPhone(parsed.data.orderNumber, parsed.data.phone);
     if (!order) return { success: false as const, error: "No order found with this order number and phone" };
     return {
@@ -133,8 +125,8 @@ export async function trackOrderAction(input: unknown) {
 export async function applyCouponAction(input: unknown) {
   const parsed = cartQuoteSchema.safeParse(input);
   if (!parsed.success || !parsed.data.couponCode) return { success: false as const, error: "Invalid cart or coupon" };
-  if (!rateLimit(await clientKey("coupon"), 20, 60_000).success) return { success: false as const, error: "Too many attempts" };
   try {
+    if (!(await allowPublicRequest("coupon", await headers(), 20, 60))) return { success: false as const, error: "Too many attempts" };
     const viewer = await checkoutViewer(true);
     const result = await orderTransaction((tx) => priceCart(tx, parsed.data, viewerKey(viewer)));
     return {
@@ -149,11 +141,10 @@ export async function applyCouponAction(input: unknown) {
 export async function submitReviewAction(input: unknown): Promise<ActionResult> {
   const parsed = reviewSchema.safeParse(input);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
-  const limiter = rateLimit(await clientKey("review"), 3, 60_000);
-  if (!limiter.success) return { success: false, error: "Too many reviews submitted. Try later." };
-
   try {
+    if (!(await allowPublicRequest("review", await headers(), 3, 60))) return { success: false, error: "Too many reviews submitted. Try later." };
     const session = await auth();
+    if (!(await prisma.product.findFirst({ where: { id: parsed.data.productId, isActive: true }, select: { id: true } }))) return { success: false, error: "Product not found" };
     await prisma.review.create({
       data: {
         productId: parsed.data.productId,
@@ -176,9 +167,8 @@ export async function subscribeNewsletterAction(input: unknown): Promise<ActionR
   const parsed = newsletterSchema.safeParse(input);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
   if (!parsed.data.consent) return { success: false, error: "Please consent to receive updates" };
-  const limiter = rateLimit(await clientKey("newsletter"), 3, 60_000);
-  if (!limiter.success) return { success: false, error: "Too many attempts" };
   try {
+    if (!(await allowPublicRequest("newsletter", await headers(), 3, 60))) return { success: false, error: "Too many attempts" };
     await prisma.newsletterSubscriber.upsert({
       where: { email: parsed.data.email },
       update: { phone: parsed.data.phone || null, consent: true },

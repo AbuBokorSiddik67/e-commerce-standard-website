@@ -28,14 +28,14 @@ export const checkoutSchema = checkoutQuoteSchema.extend({
 });
 
 export const trackOrderSchema = z.object({
-  orderNumber: z.string().min(1, "Order number is required"),
+  orderNumber: z.string().trim().min(1, "Order number is required").max(100),
   phone: z
     .string()
     .regex(/^01[3-9]\d{8}$/, "Enter a valid phone number"),
 });
 
 export const reviewSchema = z.object({
-  productId: z.string().min(1),
+  productId: id,
   customerName: z.string().min(2, "Name is required").max(100),
   city: z.string().max(100).optional().or(z.literal("")),
   rating: z.coerce.number().int().min(1, "Rating is required").max(5),
@@ -44,7 +44,7 @@ export const reviewSchema = z.object({
 });
 
 export const newsletterSchema = z.object({
-  email: z.string().email("Invalid email"),
+  email: z.string().trim().max(254).toLowerCase().pipe(z.email("Invalid email")),
   phone: z
     .string()
     .regex(/^01[3-9]\d{8}$/, "Invalid phone")

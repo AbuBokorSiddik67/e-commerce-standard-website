@@ -1,3 +1,4 @@
+import { PublicError } from "@/lib/errors";
 import { prisma } from "@/lib/prisma";
 import { generateOrderNumber, toPositiveInt } from "@/lib/utils";
 import { checkoutSchema, type CheckoutInput } from "@/lib/validations/customer";
@@ -18,7 +19,7 @@ export async function createOrder(raw: CheckoutInput, buyer: CheckoutBuyer): Pro
   return orderTransaction(async (tx) => {
     if (userId) {
       const active = await tx.user.findFirst({ where: { id: userId, role: "CUSTOMER", isBlocked: false }, select: { id: true } });
-      if (!active) throw new Error("This customer account cannot place orders");
+      if (!active) throw new PublicError("This customer account cannot place orders");
     }
     const existing = await tx.order.findUnique({ where: { idempotencyKey }, select: {
       orderNumber: true, userId: true, checkoutFingerprint: true, guestCheckoutScope: true,
@@ -30,13 +31,13 @@ export async function createOrder(raw: CheckoutInput, buyer: CheckoutBuyer): Pro
         existing.guestReceiptTokenHash === buyer.receipt.guestReceiptTokenHash;
       const ownerMatches = buyer.kind === "customer" && buyer.userId === existing.userId;
       if ((!guestMatches && !ownerMatches) || existing.checkoutFingerprint !== fingerprint) {
-        throw new Error("Unable to resume this checkout. Check your order status or contact support.");
+        throw new PublicError("Unable to resume this checkout. Check your order status or contact support.");
       }
       return { orderNumber: existing.orderNumber, ...(guestMatches && existing.guestReceiptExpiresAt
         ? { guestReceiptExpiresAt: existing.guestReceiptExpiresAt } : {}) };
     }
     const quote = await priceCheckout(tx, input, buyerKey);
-    if (expectedQuote && expectedQuote !== quote.summary.fingerprint) throw new Error("The checkout prices changed. Review your updated total before placing the order.");
+    if (expectedQuote && expectedQuote !== quote.summary.fingerprint) throw new PublicError("The checkout prices changed. Review your updated total before placing the order.");
 
     if (quote.coupon && buyerKey) {
       const { id, usageLimit } = quote.coupon;
@@ -45,16 +46,16 @@ export async function createOrder(raw: CheckoutInput, buyer: CheckoutBuyer): Pro
           ...(usageLimit === null ? {} : { usedCount: { lt: usageLimit } }) },
         data: { usedCount: { increment: 1 } },
       });
-      if (!count.count) throw new Error("The coupon is no longer available");
+      if (!count.count) throw new PublicError("The coupon is no longer available");
       const redemption = await tx.couponRedemption.createMany({ data: { couponId: id, buyerKey }, skipDuplicates: true });
-      if (!redemption.count) throw new Error("You already used this coupon");
+      if (!redemption.count) throw new PublicError("You already used this coupon");
     }
     for (const item of quote.items) {
       const data = { stock: { decrement: item.quantity } };
       const updated = item.variantId
         ? await tx.productVariant.updateMany({ where: { id: item.variantId, productId: item.productId, isActive: true, stock: { gte: item.quantity } }, data })
         : await tx.product.updateMany({ where: { id: item.productId, isActive: true, stock: { gte: item.quantity } }, data });
-      if (!updated.count) throw new Error("Insufficient stock for an item in your cart");
+      if (!updated.count) throw new PublicError("Insufficient stock for an item in your cart");
     }
 
     const contact = { fullName: input.fullName, phone: input.phone, email: input.email || null };
@@ -184,7 +185,7 @@ async function assertActor(tx: Prisma.TransactionClient, actor: StatusActor) {
   const found = await tx.user.findFirst({ where: {
     id: actor.userId, role: actor.kind === "admin" ? "ADMIN" : "CUSTOMER", isBlocked: false,
   }, select: { id: true } });
-  if (!found) throw new Error("You cannot change this order");
+  if (!found) throw new PublicError("You cannot change this order");
 }
 
 async function restoreInventory(tx: Prisma.TransactionClient, items: {
@@ -193,7 +194,7 @@ async function restoreInventory(tx: Prisma.TransactionClient, items: {
   const stock = new Map<string, number>();
   for (const { productId, variantId, variant, quantity } of items) {
     // Older canceled orders may reference deleted variants. Do not guess which SKU to credit.
-    if (!productId || (variant && !variantId) || quantity <= 0) throw new Error("This order needs a manual inventory review before cancellation");
+    if (!productId || (variant && !variantId) || quantity <= 0) throw new PublicError("This order needs a manual inventory review before cancellation");
     if (!variantId || inventoryVersion === 1) {
       const key = JSON.stringify([productId, null]);
       stock.set(key, (stock.get(key) ?? 0) + quantity);
@@ -209,7 +210,7 @@ async function restoreInventory(tx: Prisma.TransactionClient, items: {
     const updated = variantId
       ? await tx.productVariant.updateMany({ where: { id: variantId, productId }, data })
       : await tx.product.updateMany({ where: { id: productId }, data });
-    if (!updated.count) throw new Error("This order needs a manual inventory review before cancellation");
+    if (!updated.count) throw new PublicError("This order needs a manual inventory review before cancellation");
   }
 }
 
@@ -220,13 +221,13 @@ async function changeOrderStatus(ref: { id: string } | { orderNumber: string }, 
       where: { ...ref, ...(actor.kind === "customer" ? customerOrderOwnership(actor.userId) : {}) },
       select: { id: true, status: true, paymentStatus: true, inventoryVersion: true },
     });
-    if (!order) throw new Error("Order not found");
+    if (!order) throw new PublicError("Order not found");
     if (actor.kind === "customer" && (status !== "CANCELLED" || !["PENDING", "CONFIRMED"].includes(order.status))) {
-      throw new Error("This order can no longer be cancelled online");
+      throw new PublicError("This order can no longer be cancelled online");
     }
-    if (!ALLOWED_TRANSITIONS[order.status].includes(status)) throw new Error(`Cannot change status from ${order.status} to ${status}`);
+    if (!ALLOWED_TRANSITIONS[order.status].includes(status)) throw new PublicError(`Cannot change status from ${order.status} to ${status}`);
     if (status === "CANCELLED" && (order.paymentStatus === "PAID" || order.paymentStatus === "REFUNDED")) {
-      throw new Error("This order needs payment review before cancellation");
+      throw new PublicError("This order needs payment review before cancellation");
     }
     const now = new Date();
     const result = await tx.order.updateMany({
@@ -239,17 +240,19 @@ async function changeOrderStatus(ref: { id: string } | { orderNumber: string }, 
         ...(status === "CANCELLED" ? { cancelledAt: now, cancelReason: reason ?? null } : {}),
       },
     });
-    if (!result.count) throw new Error("Order state changed. Refresh and try again.");
+    if (!result.count) throw new PublicError("Order state changed. Refresh and try again.");
+    let restoredUnits = 0;
     if (status === "CANCELLED") {
       const items = await tx.orderItem.findMany({ where: { orderId: order.id }, select: {
         productId: true, variantId: true, variant: true, quantity: true,
       } });
-      if (!items.length) throw new Error("This order needs a manual inventory review before cancellation");
+      if (!items.length) throw new PublicError("This order needs a manual inventory review before cancellation");
       await restoreInventory(tx, items, order.inventoryVersion);
+      restoredUnits = items.reduce((total, item) => total + item.quantity, 0);
     }
     await tx.auditLog.create({ data: {
       userId: actor.userId, action: "ORDER_STATUS_CHANGE", entity: "Order", entityId: order.id,
-      detail: { from: order.status, to: status },
+      detail: { from: order.status, to: status, ...(restoredUnits ? { restoredUnits } : {}) },
     } });
     return { id: order.id, status };
   });
@@ -267,13 +270,13 @@ export async function updatePaymentStatus(id: string, next: PaymentStatus, admin
   return orderTransaction(async (tx) => {
     await assertActor(tx, { kind: "admin", userId: adminId });
     const order = await tx.order.findUnique({ where: { id }, select: { status: true, paymentStatus: true, total: true } });
-    if (!order) throw new Error("Order not found");
+    if (!order) throw new PublicError("Order not found");
     const valid = (order.status === "DELIVERED" && ((["PENDING", "FAILED"].includes(order.paymentStatus) && next === "PAID") ||
       (order.paymentStatus === "PAID" && next === "PENDING"))) ||
       (order.status === "RETURNED" && order.paymentStatus === "PAID" && next === "REFUNDED");
-    if (!valid) throw new Error("This payment change is not allowed for the current order status");
+    if (!valid) throw new PublicError("This payment change is not allowed for the current order status");
     const updated = await tx.order.updateMany({ where: { id, status: order.status, paymentStatus: order.paymentStatus }, data: { paymentStatus: next } });
-    if (!updated.count) throw new Error("Order state changed. Refresh and try again.");
+    if (!updated.count) throw new PublicError("Order state changed. Refresh and try again.");
     await tx.auditLog.create({ data: {
       userId: adminId, action: "ORDER_PAYMENT_STATUS_CHANGE", entity: "Order", entityId: id,
       detail: { from: order.paymentStatus, to: next, orderTotal: order.total.toFixed(2), method: "COD" },

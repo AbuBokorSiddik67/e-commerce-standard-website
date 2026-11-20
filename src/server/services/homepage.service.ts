@@ -1,3 +1,4 @@
+import { PublicError } from "@/lib/errors";
 import { prisma } from "@/lib/prisma";
 import { isPlainObject, logError } from "@/lib/errors";
 import { toPositiveInt } from "@/lib/utils";
@@ -65,7 +66,7 @@ export async function upsertHomepageSection(input: HomepageSectionInput, adminId
 
 export async function createHomepageSection(sectionKey: HomepageSectionKey, adminId: string) {
   const existing = await prisma.homepageSection.findFirst({ where: { sectionKey } });
-  if (existing) throw new Error("This section already exists on the homepage");
+  if (existing) throw new PublicError("This section already exists on the homepage");
 
   const meta = HOMEPAGE_SECTIONS.find((s) => s.key === sectionKey);
   const last = await prisma.homepageSection.findFirst({ orderBy: { sortOrder: "desc" } });
@@ -188,10 +189,7 @@ export async function getHomepageData() {
           break;
       }
     } catch (error) {
-      logError("homepage.section", error, {
-        sectionId: section.id,
-        sectionKey: section.sectionKey,
-      });
+      logError("homepage.section", error);
       data[section.sectionKey] = [];
     }
   }

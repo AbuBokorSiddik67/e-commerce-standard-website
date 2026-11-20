@@ -2,11 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
-import { productSchema, deliveryZoneSchema, categorySchema, bannerSchema, couponSchema, settingsSchema, homepageSectionSchema } from "@/lib/validations/admin";
+import { productSchema, resourceId, deliveryZoneSchema, categorySchema, bannerSchema, couponSchema, settingsSchema, homepageSectionSchema } from "@/lib/validations/admin";
 import { createProduct, updateProduct, deleteProduct, bulkUpdateProducts, bulkDeleteProducts } from "@/server/services/product.service";
 import { createCategory, updateCategory, deleteCategory } from "@/server/services/category.service";
 import { createBanner, updateBanner, deleteBanner, createCoupon, updateCoupon, deleteCoupon } from "@/server/services/content.service";
-import { updateStoreSettings, createDeliveryZone, updateDeliveryZone, deleteDeliveryZone } from "@/server/repositories/settings.repo";
+import { updateStoreSettings, saveDeliveryZone, deleteDeliveryZone } from "@/server/repositories/settings.repo";
 import { upsertHomepageSection, reorderHomepageSections, createHomepageSection, deleteHomepageSection } from "@/server/services/homepage.service";
 import { HOMEPAGE_SECTIONS } from "@/lib/constants";
 import type { HomepageSectionKey } from "@prisma/client";
@@ -14,6 +14,8 @@ import { updateOrderStatus, updatePaymentStatus } from "@/server/services/order.
 import { setCustomerBlocked } from "@/server/services/customer.service";
 import { z } from "zod";
 import { actionErrorMessage, friendlyError, logError } from "@/lib/errors";
+import { audit } from "@/lib/audit";
+import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 
 type ActionResult = { success: boolean; error?: string; id?: string };
@@ -21,7 +23,7 @@ type ActionResult = { success: boolean; error?: string; id?: string };
 async function guard() {
   try {
     const session = await auth();
-    if (!session?.user || session.user.role !== "ADMIN") {
+    if (!session?.user?.id || session.user.role !== "ADMIN") {
       return { ok: false as const, error: "Unauthorized" };
     }
     return { ok: true as const, userId: session.user.id };
@@ -42,6 +44,7 @@ function zodError(error: z.ZodError): string {
 export async function saveProductAction(id: string | null, formData: FormData): Promise<ActionResult> {
   const g = await guard();
   if (!g.ok) return { success: false, error: g.error };
+  if (!(formData instanceof FormData) || (id !== null && !resourceId.safeParse(id).success)) return { success: false, error: "Invalid form or resource" };
 
   try {
     const raw = Object.fromEntries(formData);
@@ -67,7 +70,7 @@ export async function saveProductAction(id: string | null, formData: FormData): 
     revalidatePath("/products");
     return { success: true, id: p.id };
   } catch (e) {
-    logError("admin.saveProduct", e, { productId: id });
+    logError("admin.saveProduct", e);
     return { success: false, error: friendlyError(e, "Failed to save product") };
   }
 }
@@ -75,6 +78,7 @@ export async function saveProductAction(id: string | null, formData: FormData): 
 export async function deleteProductAction(id: string): Promise<ActionResult> {
   const g = await guard();
   if (!g.ok) return { success: false, error: g.error };
+  if (!resourceId.safeParse(id).success) return { success: false, error: "Invalid resource" };
   try {
     await deleteProduct(id, g.userId);
     revalidatePath("/admin/products");
@@ -88,6 +92,8 @@ export async function deleteProductAction(id: string): Promise<ActionResult> {
 export async function bulkProductAction(ids: string[], action: "activate" | "deactivate" | "feature" | "unfeature" | "delete"): Promise<ActionResult> {
   const g = await guard();
   if (!g.ok) return { success: false, error: g.error };
+  const parsed = z.object({ ids: z.array(resourceId).min(1).max(100), action: z.enum(["activate", "deactivate", "feature", "unfeature", "delete"]) }).safeParse({ ids, action });
+  if (!parsed.success) return { success: false, error: "Invalid bulk action" };
   try {
     if (action === "delete") await bulkDeleteProducts(ids, g.userId);
     else if (action === "activate") await bulkUpdateProducts(ids, { isActive: true }, g.userId);
@@ -106,6 +112,7 @@ export async function bulkProductAction(ids: string[], action: "activate" | "dea
 export async function saveCategoryAction(id: string | null, formData: FormData): Promise<ActionResult> {
   const g = await guard();
   if (!g.ok) return { success: false, error: g.error };
+  if (!(formData instanceof FormData) || (id !== null && !resourceId.safeParse(id).success)) return { success: false, error: "Invalid form or resource" };
   const parsed = categorySchema.safeParse({
     ...Object.fromEntries(formData),
     showOnHome: formData.get("showOnHome") === "true",
@@ -127,6 +134,7 @@ export async function saveCategoryAction(id: string | null, formData: FormData):
 export async function deleteCategoryAction(id: string): Promise<ActionResult> {
   const g = await guard();
   if (!g.ok) return { success: false, error: g.error };
+  if (!resourceId.safeParse(id).success) return { success: false, error: "Invalid resource" };
   try {
     await deleteCategory(id, g.userId);
     revalidatePath("/admin/categories");
@@ -141,6 +149,7 @@ export async function deleteCategoryAction(id: string): Promise<ActionResult> {
 export async function saveBannerAction(id: string | null, formData: FormData): Promise<ActionResult> {
   const g = await guard();
   if (!g.ok) return { success: false, error: g.error };
+  if (!(formData instanceof FormData) || (id !== null && !resourceId.safeParse(id).success)) return { success: false, error: "Invalid form or resource" };
   const parsed = bannerSchema.safeParse({
     ...Object.fromEntries(formData),
     isActive: formData.get("isActive") === "true",
@@ -160,6 +169,7 @@ export async function saveBannerAction(id: string | null, formData: FormData): P
 export async function deleteBannerAction(id: string): Promise<ActionResult> {
   const g = await guard();
   if (!g.ok) return { success: false, error: g.error };
+  if (!resourceId.safeParse(id).success) return { success: false, error: "Invalid resource" };
   try {
     await deleteBanner(id, g.userId);
     revalidatePath("/admin/banners");
@@ -174,6 +184,7 @@ export async function deleteBannerAction(id: string): Promise<ActionResult> {
 export async function saveCouponAction(id: string | null, formData: FormData): Promise<ActionResult> {
   const g = await guard();
   if (!g.ok) return { success: false, error: g.error };
+  if (!(formData instanceof FormData) || (id !== null && !resourceId.safeParse(id).success)) return { success: false, error: "Invalid form or resource" };
   const parsed = couponSchema.safeParse({
     ...Object.fromEntries(formData),
     isActive: formData.get("isActive") === "true",
@@ -194,6 +205,7 @@ export async function saveCouponAction(id: string | null, formData: FormData): P
 export async function deleteCouponAction(id: string): Promise<ActionResult> {
   const g = await guard();
   if (!g.ok) return { success: false, error: g.error };
+  if (!resourceId.safeParse(id).success) return { success: false, error: "Invalid resource" };
   try {
     await deleteCoupon(id, g.userId);
     revalidatePath("/admin/coupons");
@@ -207,6 +219,7 @@ export async function deleteCouponAction(id: string): Promise<ActionResult> {
 export async function saveSettingsAction(formData: FormData): Promise<ActionResult> {
   const g = await guard();
   if (!g.ok) return { success: false, error: g.error };
+  if (!(formData instanceof FormData)) return { success: false, error: "Invalid form" };
 
   const raw = Object.fromEntries(formData);
   const parsed = settingsSchema.safeParse({
@@ -245,7 +258,7 @@ export async function saveSettingsAction(formData: FormData): Promise<ActionResu
       codEnabled: d.codEnabled,
       minOrderValue: typeof d.minOrderValue === "number" ? new Prisma.Decimal(d.minOrderValue) : null,
       socialShareImage: d.socialShareImage || null,
-    });
+    }, g.userId);
     revalidatePath("/", "layout");
     return { success: true };
   } catch (e) {
@@ -256,14 +269,14 @@ export async function saveSettingsAction(formData: FormData): Promise<ActionResu
 export async function saveDeliveryZoneAction(id: string | null, formData: FormData): Promise<ActionResult> {
   const g = await guard();
   if (!g.ok) return { success: false, error: g.error };
+  if (!(formData instanceof FormData) || (id !== null && !resourceId.safeParse(id).success)) return { success: false, error: "Invalid form or resource" };
   const parsed = deliveryZoneSchema.safeParse({
     name: formData.get("name"), charge: formData.get("charge"), estimatedDays: formData.get("estimatedDays") ?? "",
     isActive: formData.get("isActive") === "true", districts: [...new Set(formData.getAll("districts"))],
   });
   if (!parsed.success) return { success: false, error: zodError(parsed.error) };
   try {
-    if (id) await updateDeliveryZone(id, parsed.data);
-    else await createDeliveryZone(parsed.data);
+    await saveDeliveryZone(id, parsed.data, g.userId);
     revalidatePath("/admin/settings");
     revalidatePath("/checkout");
     return { success: true };
@@ -275,8 +288,9 @@ export async function saveDeliveryZoneAction(id: string | null, formData: FormDa
 export async function deleteDeliveryZoneAction(id: string): Promise<ActionResult> {
   const g = await guard();
   if (!g.ok) return { success: false, error: g.error };
+  if (!resourceId.safeParse(id).success) return { success: false, error: "Invalid resource" };
   try {
-    await deleteDeliveryZone(id);
+    await deleteDeliveryZone(id, g.userId);
     revalidatePath("/admin/settings");
     revalidatePath("/checkout");
     return { success: true };
@@ -289,6 +303,7 @@ export async function deleteDeliveryZoneAction(id: string): Promise<ActionResult
 export async function saveHomepageSectionAction(formData: FormData): Promise<ActionResult> {
   const g = await guard();
   if (!g.ok) return { success: false, error: g.error };
+  if (!(formData instanceof FormData)) return { success: false, error: "Invalid form" };
   try {
     const parsed = homepageSectionSchema.safeParse({
       ...Object.fromEntries(formData),
@@ -327,6 +342,7 @@ export async function createHomepageSectionAction(sectionKey: string): Promise<A
 export async function deleteHomepageSectionAction(id: string): Promise<ActionResult> {
   const g = await guard();
   if (!g.ok) return { success: false, error: g.error };
+  if (!resourceId.safeParse(id).success) return { success: false, error: "Invalid resource" };
   try {
     await deleteHomepageSection(id, g.userId);
     revalidatePath("/admin/homepage");
@@ -340,8 +356,10 @@ export async function deleteHomepageSectionAction(id: string): Promise<ActionRes
 export async function reorderHomepageAction(sections: { id: string; sortOrder: number }[]): Promise<ActionResult> {
   const g = await guard();
   if (!g.ok) return { success: false, error: g.error };
+  const parsed = z.array(z.object({ id: resourceId, sortOrder: z.number().int().min(0).max(10_000) })).max(100).safeParse(sections);
+  if (!parsed.success) return { success: false, error: "Invalid sections" };
   try {
-    await reorderHomepageSections(sections, g.userId);
+    await reorderHomepageSections(parsed.data, g.userId);
     revalidatePath("/admin/homepage");
     revalidatePath("/");
     return { success: true };
@@ -384,9 +402,13 @@ export async function updatePaymentStatusAction(id: string, paymentStatus: strin
 export async function addOrderNoteAction(id: string, note: string): Promise<ActionResult> {
   const g = await guard();
   if (!g.ok) return { success: false, error: g.error };
+  const payload = z.object({ id: resourceId, note: z.string().trim().max(2_000) }).safeParse({ id, note });
+  if (!payload.success) return { success: false, error: "Invalid order note" };
   try {
-    const { prisma } = await import("@/lib/prisma");
-    await prisma.order.update({ where: { id }, data: { adminNotes: note } });
+    await prisma.$transaction(async (tx) => {
+      await tx.order.update({ where: { id: payload.data.id }, data: { adminNotes: payload.data.note } });
+      await audit(tx, { userId: g.userId, action: "ORDER_NOTE_UPDATE", entity: "Order", entityId: id });
+    });
     revalidatePath(`/admin/orders/${id}`);
     return { success: true };
   } catch {
@@ -398,8 +420,9 @@ export async function addOrderNoteAction(id: string, note: string): Promise<Acti
 export async function toggleCustomerBlockAction(id: string, isBlocked: boolean): Promise<ActionResult> {
   const g = await guard();
   if (!g.ok) return { success: false, error: g.error };
+  if (!resourceId.safeParse(id).success || typeof isBlocked !== "boolean") return { success: false, error: "Invalid customer update" };
   try {
-    await setCustomerBlocked(id, isBlocked, g.userId);
+    if (!(await setCustomerBlocked(id, isBlocked, g.userId))) return { success: false, error: "Customer not found" };
     revalidatePath("/admin/customers");
     revalidatePath(`/admin/customers/${id}`);
     return { success: true };

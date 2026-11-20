@@ -1,3 +1,4 @@
+import { safeLink } from "@/lib/safe-urls";
 import Image from "next/image";
 import { Instagram } from "lucide-react";
 import type { SafeHomepageSection } from "@/types/domain";
@@ -18,7 +19,7 @@ export function SocialFeed({
     profileUrl?: string;
   };
   const images = (s.images ?? []).filter(Boolean);
-  const profileUrl = s.profileUrl || settings.instagramUrl;
+  const profileUrl = safeLink(s.profileUrl || settings.instagramUrl, false);
 
   if (images.length === 0) return null;
 

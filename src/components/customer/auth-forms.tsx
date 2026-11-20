@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { startTransition, useEffect, useState } from "react";
 import Link from "next/link";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
@@ -51,7 +51,7 @@ export function LoginForm() {
         password: String(formData.get("password") ?? ""),
         redirect: false,
       });
-      if (result?.error) {
+      if (!result?.ok || result.error) {
         toast.error("Invalid email or password");
         return;
       }
@@ -121,26 +121,15 @@ export function RegisterForm() {
       confirmPassword: String(formData.get("confirmPassword") ?? ""),
     };
     setLoading(true);
-    const result = await registerAction(payload);
-    if (!result.success) {
-      setLoading(false);
-      toast.error(result.error ?? "Could not create account");
-      return;
-    }
-    let signedIn = true;
     try {
-      await signIn("credentials", {
-        email: payload.email,
-        password: payload.password,
-        redirect: false,
-      });
-    } catch {
-      signedIn = false;
-    }
-    setLoading(false);
-    toast.success("Account created!");
-    router.push(signedIn ? "/account" : "/login");
-    router.refresh();
+      const result = await registerAction(payload);
+      if (!result.success) { toast.error(result.error ?? "Could not create account"); return; }
+      const login = await signIn("credentials", { email: payload.email, password: payload.password, redirect: false }).catch(() => null);
+      toast.success("Account created!");
+      router.push(login?.ok && !login.error ? "/account" : "/login");
+      router.refresh();
+    } catch { toast.error("Could not create account"); }
+    finally { setLoading(false); }
   }
 
   return (
@@ -182,7 +171,7 @@ export function RegisterForm() {
             name="password"
             type="password"
             autoComplete="new-password"
-            minLength={8}
+            minLength={12}
             required
           />
         </div>
@@ -193,7 +182,7 @@ export function RegisterForm() {
             name="confirmPassword"
             type="password"
             autoComplete="new-password"
-            minLength={8}
+            minLength={12}
             required
           />
         </div>
@@ -207,23 +196,18 @@ export function RegisterForm() {
 
 export function ForgotPasswordForm() {
   const [loading, setLoading] = useState(false);
-  const [resetUrl, setResetUrl] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     setLoading(true);
-    const result = await requestPasswordResetAction({
-      email: String(formData.get("email") ?? ""),
-    });
-    setLoading(false);
-    if (!result.success) {
-      toast.error(result.error ?? "Could not send reset link");
-      return;
-    }
-    setSent(true);
-    setResetUrl(result.resetUrl ?? null);
+    try {
+      const result = await requestPasswordResetAction({ email: String(formData.get("email") ?? "") });
+      if (!result.success) { toast.error(result.error ?? "Could not request a reset"); return; }
+      setSent(true);
+    } catch { toast.error("Could not request a reset. Try again shortly."); }
+    finally { setLoading(false); }
   }
 
   return (
@@ -239,16 +223,9 @@ export function ForgotPasswordForm() {
       {sent ? (
         <div className="space-y-3 text-sm">
           <p className="text-muted-foreground">
-            If an account exists for that email, a reset link has been created.
+            If that email is eligible, you’ll receive password reset instructions.
           </p>
-          {resetUrl && (
-            <p className="break-all rounded-md bg-muted p-3 text-xs">
-              Dev reset link:{" "}
-              <Link href={resetUrl} className="text-primary underline">
-                {resetUrl}
-              </Link>
-            </p>
-          )}
+
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -265,7 +242,12 @@ export function ForgotPasswordForm() {
   );
 }
 
-export function ResetPasswordForm({ token }: { token: string }) {
+export function ResetPasswordForm() {
+  const [token, setToken] = useState<string>();
+  useEffect(() => {
+    const value = new URLSearchParams(window.location.hash.slice(1)).get("token") ?? "";
+    startTransition(() => setToken(value));
+  }, []);
   const router = useRouter();
   const [loading, setLoading] = useState(false);
 
@@ -273,21 +255,18 @@ export function ResetPasswordForm({ token }: { token: string }) {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     setLoading(true);
-    const result = await resetPasswordAction({
-      token,
-      password: String(formData.get("password") ?? ""),
-      confirmPassword: String(formData.get("confirmPassword") ?? ""),
-    });
-    setLoading(false);
-    if (!result.success) {
-      toast.error(result.error ?? "Could not reset password");
-      return;
-    }
-    toast.success("Password updated. Please sign in.");
-    router.push("/login");
+    try {
+      const result = await resetPasswordAction({ token, password: String(formData.get("password") ?? ""), confirmPassword: String(formData.get("confirmPassword") ?? "") });
+      if (!result.success) { toast.error(result.error ?? "Could not reset password"); return; }
+      window.history.replaceState(null, "", "/reset-password");
+      toast.success("Password updated. Please sign in.");
+      router.replace("/login");
+    } catch { toast.error("Could not reset password. Try again shortly."); }
+    finally { setLoading(false); }
   }
 
-  if (!token) {
+  if (token === undefined) return <FormShell title="Reset password" subtitle="Checking your reset link…"><span /></FormShell>;
+  if (!/^[0-9a-f]{64}$/.test(token)) {
     return (
       <FormShell title="Reset password" subtitle="This reset link is invalid or incomplete.">
         <Link href="/forgot-password" className="text-sm font-medium text-primary hover:underline">
@@ -307,7 +286,7 @@ export function ResetPasswordForm({ token }: { token: string }) {
             name="password"
             type="password"
             autoComplete="new-password"
-            minLength={8}
+            minLength={12}
             required
           />
         </div>
@@ -318,7 +297,7 @@ export function ResetPasswordForm({ token }: { token: string }) {
             name="confirmPassword"
             type="password"
             autoComplete="new-password"
-            minLength={8}
+            minLength={12}
             required
           />
         </div>

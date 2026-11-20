@@ -1,15 +1,12 @@
-import crypto from "node:crypto";
+import { PublicError } from "@/lib/errors";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { customerOrderOwnership } from "./order-access";
-import type { RegisterInput, PasswordResetInput } from "@/lib/validations/auth";
+import type { RegisterInput } from "@/lib/validations/auth";
 import type { ProfileInput, AddressInput } from "@/lib/validations/account";
 
 export async function registerCustomer(input: RegisterInput) {
   const email = input.email.toLowerCase();
-  const existing = await prisma.user.findUnique({ where: { email } });
-  if (existing) throw new Error("An account with this email already exists");
-
   const passwordHash = await bcrypt.hash(input.password, 12);
   return prisma.user.create({
     data: {
@@ -24,14 +21,14 @@ export async function registerCustomer(input: RegisterInput) {
           email,
         },
       },
-    },
+    }, select: { id: true },
   });
 }
 
 export async function getAccountContext(userId: string) {
   return prisma.user.findUnique({
     where: { id: userId },
-    include: { customer: true },
+    select: { name: true, email: true, customer: { select: { phone: true, fullName: true } } },
   });
 }
 
@@ -82,7 +79,7 @@ export async function createCustomerAddress(userId: string, input: AddressInput)
 
 export async function updateCustomerAddress(userId: string, id: string, input: AddressInput) {
   const existing = await prisma.address.findFirst({ where: { id, userId } });
-  if (!existing) throw new Error("Address not found");
+  if (!existing) throw new PublicError("Address not found");
   if (input.isDefault) {
     await prisma.address.updateMany({ where: { userId }, data: { isDefault: false } });
   }
@@ -102,13 +99,13 @@ export async function updateCustomerAddress(userId: string, id: string, input: A
 
 export async function deleteCustomerAddress(userId: string, id: string) {
   const existing = await prisma.address.findFirst({ where: { id, userId } });
-  if (!existing) throw new Error("Address not found");
+  if (!existing) throw new PublicError("Address not found");
   await prisma.address.delete({ where: { id } });
 }
 
 export async function setDefaultCustomerAddress(userId: string, id: string) {
   const existing = await prisma.address.findFirst({ where: { id, userId } });
-  if (!existing) throw new Error("Address not found");
+  if (!existing) throw new PublicError("Address not found");
   await prisma.$transaction([
     prisma.address.updateMany({ where: { userId }, data: { isDefault: false } }),
     prisma.address.update({ where: { id }, data: { isDefault: true } }),
@@ -151,7 +148,7 @@ export async function toggleWishlist(userId: string, productId: string) {
     where: { id: productId, isActive: true },
     select: { id: true },
   });
-  if (!product) throw new Error("Product not found");
+  if (!product) throw new PublicError("Product not found");
 
   const existing = await prisma.wishlistItem.findUnique({
     where: { userId_productId: { userId, productId } },
@@ -171,38 +168,4 @@ export async function isWishlisted(userId: string, productIds: string[]) {
     select: { productId: true },
   });
   return new Set(items.map((i) => i.productId));
-}
-
-export async function createPasswordResetToken(email: string) {
-  const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
-  if (!user || user.isBlocked) return null;
-
-  const token = crypto.randomBytes(32).toString("hex");
-  const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
-  const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
-
-  await prisma.passwordResetToken.upsert({
-    where: { userId: user.id },
-    update: { tokenHash, expiresAt, usedAt: null },
-    create: { userId: user.id, tokenHash, expiresAt },
-  });
-
-  return { token, email: user.email };
-}
-
-export async function resetPassword(input: PasswordResetInput) {
-  const tokenHash = crypto.createHash("sha256").update(input.token).digest("hex");
-  const row = await prisma.passwordResetToken.findUnique({ where: { tokenHash } });
-  if (!row || row.usedAt || row.expiresAt.getTime() < Date.now()) {
-    throw new Error("This reset link is invalid or has expired");
-  }
-
-  const passwordHash = await bcrypt.hash(input.password, 12);
-  await prisma.$transaction([
-    prisma.user.update({ where: { id: row.userId }, data: { passwordHash } }),
-    prisma.passwordResetToken.update({
-      where: { userId: row.userId },
-      data: { usedAt: new Date() },
-    }),
-  ]);
 }

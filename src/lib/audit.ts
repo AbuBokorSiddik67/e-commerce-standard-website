@@ -1,40 +1,23 @@
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { headers } from "next/headers";
+import { logError } from "@/lib/errors";
 
-export async function writeAuditLog(params: {
-  userId?: string;
+type AuditEntry = {
+  userId: string;
   action: string;
-  entity?: string;
+  entity: string;
   entityId?: string;
-  detail?: Record<string, unknown>;
-}) {
-  try {
-    // A JWT session can outlive the user row it points to (for example after
-    // the database is reset or re-seeded). Never trust the id blindly: if the
-    // user no longer exists, store the log with a null user instead of failing
-    // the AuditLog_userId_fkey foreign key constraint.
-    let userId: string | null = params.userId ?? null;
-    if (userId) {
-      const user = await prisma.user.findUnique({
-        where: { id: userId },
-        select: { id: true },
-      });
-      if (!user) userId = null;
-    }
+  detail?: Prisma.InputJsonObject;
+};
 
-    const h = await headers();
-    const ip = h.get("x-forwarded-for") ?? undefined;
-    await prisma.auditLog.create({
-      data: {
-        userId,
-        action: params.action,
-        entity: params.entity,
-        entityId: params.entityId,
-        detail: params.detail ? (params.detail as never) : undefined,
-        ipAddress: ip,
-      },
-    });
-  } catch {
-    // Audit log failure should never break the main operation
-  }
+// Critical writes pass their transaction so mutation and audit commit together.
+export async function audit(tx: Prisma.TransactionClient, entry: AuditEntry) {
+  await tx.auditLog.create({ data: entry });
+}
+
+// Older editorial actions retain best-effort auditing. Do not record request IP headers,
+// arbitrary objects, credentials, free-form notes, or provider data.
+export async function writeAuditLog(entry: AuditEntry) {
+  try { await audit(prisma, entry); }
+  catch (error) { logError("audit.write", error); }
 }

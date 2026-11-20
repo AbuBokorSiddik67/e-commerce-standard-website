@@ -3,9 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
-import { rateLimit } from "@/lib/rate-limit";
+import { allowPublicRequest } from "@/lib/shared-rate-limit";
+import { after } from "next/server";
+import { changePassword, resetPassword } from "@/server/services/auth-security";
+import { sendCustomerReset } from "@/server/services/reset-mail";
 import { actionErrorMessage, logError } from "@/lib/errors";
-import { registerSchema, passwordResetRequestSchema, passwordResetSchema } from "@/lib/validations/auth";
+import { registerSchema, passwordResetRequestSchema, passwordResetSchema, changePasswordSchema } from "@/lib/validations/auth";
 import { profileSchema, addressSchema } from "@/lib/validations/account";
 import {
   registerCustomer,
@@ -15,25 +18,19 @@ import {
   deleteCustomerAddress,
   setDefaultCustomerAddress,
   toggleWishlist,
-  createPasswordResetToken,
-  resetPassword,
 } from "@/server/services/account.service";
 
 import { cancelCustomerOrder } from "@/server/services/order.service";
 import { z } from "zod";
 
-type ActionResult = { success: boolean; error?: string; resetUrl?: string; wishlisted?: boolean };
+type ActionResult = { success: boolean; error?: string; wishlisted?: boolean };
 
-async function clientKey(prefix: string) {
-  const h = await headers();
-  const ip = h.get("x-forwarded-for") ?? "unknown";
-  return `${prefix}:${ip}`;
-}
+const resourceId = z.string().trim().min(1).max(100);
 
 async function customerId() {
   try {
     const session = await auth();
-    if (!session?.user || session.user.role !== "CUSTOMER") return null;
+    if (!session?.user?.id || session.user.role !== "CUSTOMER") return null;
     return session.user.id;
   } catch (error) {
     logError("account.session", error);
@@ -47,16 +44,13 @@ export async function registerAction(input: unknown): Promise<ActionResult> {
     return { success: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
 
-  const limiter = rateLimit(await clientKey("register"), 3, 60_000);
-  if (!limiter.success) {
-    return { success: false, error: "Too many attempts. Please try again in a minute." };
-  }
-
   try {
+    if (!(await allowPublicRequest("registration", await headers(), 5, 300, parsed.data.email))) return { success: false, error: "Please wait before trying again" };
     await registerCustomer(parsed.data);
     return { success: true };
-  } catch (e) {
-    return { success: false, error: actionErrorMessage("account", e, "Could not create account") };
+  } catch (error) {
+    logError("account.register", error);
+    return { success: false, error: "Could not create account. If you already have an account, sign in or reset your password." };
   }
 }
 
@@ -82,6 +76,7 @@ export async function saveAddressAction(id: string | null, input: unknown): Prom
   const userId = await customerId();
   if (!userId) return { success: false, error: "Please sign in to manage addresses" };
 
+  if (id !== null && !resourceId.safeParse(id).success) return { success: false, error: "Address not found" };
   const parsed = addressSchema.safeParse(input);
   if (!parsed.success) {
     return { success: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
@@ -100,6 +95,7 @@ export async function saveAddressAction(id: string | null, input: unknown): Prom
 export async function deleteAddressAction(id: string): Promise<ActionResult> {
   const userId = await customerId();
   if (!userId) return { success: false, error: "Please sign in to manage addresses" };
+  if (!resourceId.safeParse(id).success) return { success: false, error: "Invalid item" };
   try {
     await deleteCustomerAddress(userId, id);
     revalidatePath("/account/addresses");
@@ -112,6 +108,7 @@ export async function deleteAddressAction(id: string): Promise<ActionResult> {
 export async function setDefaultAddressAction(id: string): Promise<ActionResult> {
   const userId = await customerId();
   if (!userId) return { success: false, error: "Please sign in to manage addresses" };
+  if (!resourceId.safeParse(id).success) return { success: false, error: "Invalid item" };
   try {
     await setDefaultCustomerAddress(userId, id);
     revalidatePath("/account/addresses");
@@ -124,6 +121,7 @@ export async function setDefaultAddressAction(id: string): Promise<ActionResult>
 export async function toggleWishlistAction(productId: string): Promise<ActionResult> {
   const userId = await customerId();
   if (!userId) return { success: false, error: "Please sign in to save items to your wishlist" };
+  if (!resourceId.safeParse(productId).success) return { success: false, error: "Invalid item" };
   try {
     const result = await toggleWishlist(userId, productId);
     revalidatePath("/account/wishlist");
@@ -135,58 +133,38 @@ export async function toggleWishlistAction(productId: string): Promise<ActionRes
 
 export async function requestPasswordResetAction(input: unknown): Promise<ActionResult> {
   const parsed = passwordResetRequestSchema.safeParse(input);
-  if (!parsed.success) {
-    return { success: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
-  }
-
-  const limiter = rateLimit(await clientKey("password-reset"), 3, 60_000);
-  if (!limiter.success) {
-    return { success: false, error: "Too many attempts. Please try again in a minute." };
-  }
-
-  try {
-    const result = await createPasswordResetToken(parsed.data.email);
-    if (!result) {
-      return { success: true };
-    }
-
-    const base = (
-      process.env.NEXT_PUBLIC_APP_URL ??
-      process.env.NEXTAUTH_URL ??
-      "http://localhost:3000"
-    ).replace(/\/$/, "");
-
-    return {
-      success: true,
-      resetUrl:
-        process.env.NODE_ENV !== "production"
-          ? `${base}/reset-password?token=${result.token}`
-          : undefined,
-    };
-  } catch (e) {
-    return {
-      success: false,
-      error: actionErrorMessage(
-        "account.requestPasswordReset",
-        e,
-        "Could not start password reset right now. Please try again.",
-      ),
-    };
-  }
+  if (!parsed.success) return { success: false, error: "Enter a valid email address" };
+  const requestHeaders = await headers();
+  // Neither account lookup nor provider latency changes the public response.
+  after(async () => {
+    try {
+      if (await allowPublicRequest("password-reset", requestHeaders, 3, 900, parsed.data.email)) await sendCustomerReset(parsed.data.email);
+    } catch (error) { logError("account.passwordResetDelivery", error); }
+  });
+  return { success: true };
 }
 
 export async function resetPasswordAction(input: unknown): Promise<ActionResult> {
   const parsed = passwordResetSchema.safeParse(input);
-  if (!parsed.success) {
-    return { success: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
-  }
-
+  if (!parsed.success) return { success: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  const failure = { success: false, error: "This reset link is invalid or has expired. Request a new link." };
   try {
-    await resetPassword(parsed.data);
-    return { success: true };
-  } catch (e) {
-    return { success: false, error: actionErrorMessage("account", e, "Could not reset password") };
-  }
+    if (!(await allowPublicRequest("password-reset-confirm", await headers(), 8, 300, parsed.data.token))) return failure;
+    return (await resetPassword(parsed.data)) ? { success: true } : failure;
+  } catch (error) { logError("account.passwordReset", error); return failure; }
+}
+
+export async function changePasswordAction(input: unknown): Promise<ActionResult> {
+  const parsed = changePasswordSchema.safeParse(input);
+  if (!parsed.success) return { success: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  try {
+    const session = await auth();
+    if (!session?.user?.id) return { success: false, error: "Please sign in" };
+    if (session.user.role === "ADMIN" && parsed.data.password.length < 16) return { success: false, error: "Use at least 16 characters for an admin password" };
+    if (!(await allowPublicRequest("password-change", await headers(), 5, 900, session.user.id))) return { success: false, error: "Please wait before trying again" };
+    if (await changePassword(session.user.id, parsed.data.currentPassword, parsed.data.password)) return { success: true };
+  } catch (error) { logError("account.passwordChange", error); }
+  return { success: false, error: "Could not change your password. Check your current password and try again." };
 }
 
 export async function cancelMyOrderAction(orderNumber: unknown): Promise<ActionResult> {

@@ -92,7 +92,11 @@ export async function getOrdersForExport(params: { dateFrom: Date; dateTo: Date 
   );
   return prisma.order.findMany({
     where: { placedAt: { gte: dateFrom, lte: dateTo } },
-    include: { items: true },
+    select: { orderNumber: true, placedAt: true, fullName: true, phone: true, district: true, city: true,
+      subtotal: true, discount: true, deliveryCharge: true, total: true, status: true, paymentStatus: true,
+      items: { select: { name: true, quantity: true } },
+    },
+    take: 10_001,
     orderBy: { placedAt: "desc" },
   });
 }

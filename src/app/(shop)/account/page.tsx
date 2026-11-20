@@ -1,3 +1,4 @@
+import { ChangePasswordForm } from "@/components/shared/change-password-form";
 import Link from "next/link";
 import { requireCustomer } from "@/lib/auth-guard";
 import { getAccountContext, listCustomerOrders, listCustomerAddresses, listWishlist } from "@/server/services/account.service";
@@ -66,6 +67,7 @@ export default async function AccountOverviewPage() {
           email={context?.email ?? session.user.email ?? ""}
         />
       </div>
+      <ChangePasswordForm />
     </div>
   );
 }

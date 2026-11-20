@@ -1,6 +1,7 @@
+import { PublicError } from "@/lib/errors";
 import { prisma } from "@/lib/prisma";
 import type { BannerInput, CouponInput } from "@/lib/validations/admin";
-import { writeAuditLog } from "@/lib/audit";
+import { audit, writeAuditLog } from "@/lib/audit";
 
 export async function listBanners() {
   return prisma.banner.findMany({ orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }] });
@@ -88,32 +89,33 @@ function couponData(input: CouponInput) {
   };
 }
 
-async function saveCoupon(id: string | null, input: CouponInput) {
+async function saveCoupon(id: string | null, input: CouponInput, adminId: string) {
   const data = couponData(input);
   return prisma.$transaction(async (tx) => {
     const [products, categories] = await Promise.all([
       tx.product.count({ where: { id: { in: data.productIds } } }),
       tx.category.count({ where: { id: { in: data.categoryIds } } }),
     ]);
-    if (products !== data.productIds.length || categories !== data.categoryIds.length) throw new Error("Select existing coupon products and categories");
-    return id ? tx.coupon.update({ where: { id }, data }) : tx.coupon.create({ data });
+    if (products !== data.productIds.length || categories !== data.categoryIds.length) throw new PublicError("Select existing coupon products and categories");
+    const coupon = await (id ? tx.coupon.update({ where: { id }, data }) : tx.coupon.create({ data }));
+    await audit(tx, { userId: adminId, action: id ? "COUPON_UPDATE" : "COUPON_CREATE", entity: "Coupon", entityId: coupon.id,
+      detail: { active: coupon.isActive, usageLimit: coupon.usageLimit, productCount: data.productIds.length, categoryCount: data.categoryIds.length } });
+    return coupon;
   });
 }
 
 export async function createCoupon(input: CouponInput, adminId: string) {
-  const coupon = await saveCoupon(null, input);
-  await writeAuditLog({ userId: adminId, action: "COUPON_CREATE", entity: "Coupon", entityId: coupon.id });
-  return coupon;
+  return saveCoupon(null, input, adminId);
 }
 
 export async function updateCoupon(id: string, input: CouponInput, adminId: string) {
-  const coupon = await saveCoupon(id, input);
-  await writeAuditLog({ userId: adminId, action: "COUPON_UPDATE", entity: "Coupon", entityId: id });
-  return coupon;
+  return saveCoupon(id, input, adminId);
 }
 
 export async function deleteCoupon(id: string, adminId: string) {
-  const coupon = await prisma.coupon.update({ where: { id }, data: { isActive: false } });
-  await writeAuditLog({ userId: adminId, action: "COUPON_ARCHIVE", entity: "Coupon", entityId: id });
-  return coupon;
+  return prisma.$transaction(async (tx) => {
+    const coupon = await tx.coupon.update({ where: { id }, data: { isActive: false } });
+    await audit(tx, { userId: adminId, action: "COUPON_ARCHIVE", entity: "Coupon", entityId: id });
+    return coupon;
+  });
 }

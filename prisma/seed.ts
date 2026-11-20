@@ -1,27 +1,17 @@
 import { BANGLADESH_DISTRICTS } from "../src/lib/constants";
-import { PrismaClient, Role } from "@prisma/client";
+import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
-import bcrypt from "bcryptjs";
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
-  console.log("Seeding database...");
-
-  // Admin user
-  const adminPass = await bcrypt.hash("admin12345", 12);
-  const admin = await prisma.user.upsert({
-    where: { email: "admin@shopbd.com" },
-    update: {},
-    create: {
-      email: "admin@shopbd.com",
-      passwordHash: adminPass,
-      role: Role.ADMIN,
-      name: "Store Admin",
-    },
-  });
-  console.log("Admin user:", admin.email);
+  const url = new URL(process.env.DATABASE_URL ?? "");
+  if (process.env.NODE_ENV === "production" || process.env.SHOPBD_ALLOW_DEMO_SEED !== "1" ||
+      !["localhost", "127.0.0.1", "[::1]"].includes(url.hostname) || !/^\/shopbd_(?:dev|demo|security_test)$/.test(url.pathname)) {
+    throw new Error("Demo seed requires explicit opt-in and a disposable loopback shopbd_dev, shopbd_demo or shopbd_security_test database");
+  }
+  console.log("Seeding demo database (no admin credentials)...");
 
   // Store settings (singleton)
   await prisma.storeSetting.upsert({
@@ -248,7 +238,6 @@ async function main() {
   console.log("Coupon created: WELCOME10");
 
   console.log("Seed complete!");
-  console.log("Admin login: admin@shopbd.com / admin12345");
 }
 
 main()

@@ -1,5 +1,6 @@
 'use client';
 
+import { safeLink } from "@/lib/safe-urls";
 import { useEffect, useRef, useState } from 'react';
 import { getImageProps } from 'next/image';
 import Link from 'next/link';
@@ -141,10 +142,7 @@ export function HeroBanner({
 }) {
   const settings = section.settings ?? {};
   const fallbackHref =
-    typeof settings.primaryCtaLink === 'string' &&
-    settings.primaryCtaLink.trim()
-      ? settings.primaryCtaLink
-      : '/products';
+    safeLink(settings.primaryCtaLink) ?? "/products";
   // Only used on the placeholder slide (when no banner image exists).
   const ctaLabel =
     typeof settings.primaryCtaText === 'string' &&
@@ -169,7 +167,7 @@ export function HeroBanner({
           typeof mobileImages[banner.id] === 'string'
             ? (mobileImages[banner.id] as string)
             : null,
-        href: banner.ctaLink?.trim() || fallbackHref,
+        href: safeLink(banner.ctaLink) ?? fallbackHref,
         alt: banner.title?.trim() || section.title?.trim() || 'Store promotion',
       }))
     : [

@@ -1,5 +1,7 @@
 "use client";
 
+import { safeLink } from "@/lib/safe-urls";
+
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
@@ -202,9 +204,9 @@ export function Footer({ settings }: { settings: Record<string, unknown> }) {
   const phone = settings.contactPhone as string | null;
   const email = settings.contactEmail as string | null;
   const address = settings.storeAddress as string | null;
-  const fb = settings.facebookUrl as string | null;
-  const ig = settings.instagramUrl as string | null;
-  const yt = settings.youtubeUrl as string | null;
+  const fb = safeLink(settings.facebookUrl, false);
+  const ig = safeLink(settings.instagramUrl, false);
+  const yt = safeLink(settings.youtubeUrl, false);
 
   return (
     <footer className="border-t bg-muted/30">

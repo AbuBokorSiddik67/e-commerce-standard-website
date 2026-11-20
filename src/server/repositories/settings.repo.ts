@@ -1,3 +1,4 @@
+import { audit } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_STORE_SETTINGS } from "@/config/site";
 import type { StoreSetting } from "@prisma/client";
@@ -170,11 +171,14 @@ export async function getStoreSettings(): Promise<PublicStoreSettings> {
   }
 }
 
-export async function updateStoreSettings(data: Partial<StoreSetting>) {
-  return prisma.storeSetting.upsert({
-    where: { id: 1 },
-    update: { ...data, id: 1 },
-    create: { id: 1, ...DEFAULT_STORE_SETTINGS, ...data },
+export async function updateStoreSettings(data: Partial<StoreSetting>, adminId: string) {
+  return prisma.$transaction(async (tx) => {
+    const settings = await tx.storeSetting.upsert({
+      where: { id: 1 }, update: { ...data, id: 1 }, create: { id: 1, ...DEFAULT_STORE_SETTINGS, ...data },
+    });
+    await audit(tx, { userId: adminId, action: "STORE_SETTINGS_UPDATE", entity: "StoreSetting", entityId: "1",
+      detail: { fields: Object.keys(data), codEnabled: settings.codEnabled, minOrderValue: settings.minOrderValue?.toFixed(2) ?? null } });
+    return settings;
   });
 }
 
@@ -189,34 +193,21 @@ export async function getAllDeliveryZones() {
   return prisma.deliveryZone.findMany({ orderBy: { name: "asc" } });
 }
 
-export async function createDeliveryZone(data: {
-  name: string;
-  charge: number;
-  estimatedDays?: string;
-  districts: string[];
-  isActive: boolean;
-}) {
-  return prisma.deliveryZone.create({
-    data: {
-      name: data.name,
-      charge: data.charge,
-      estimatedDays: data.estimatedDays || null,
-      districts: data.districts,
-      isActive: data.isActive,
-    },
+type ZoneData = { name: string; charge: number; estimatedDays?: string; districts: string[]; isActive: boolean };
+
+export async function saveDeliveryZone(id: string | null, data: ZoneData, adminId: string) {
+  return prisma.$transaction(async (tx) => {
+    const zone = await (id ? tx.deliveryZone.update({ where: { id }, data }) : tx.deliveryZone.create({ data }));
+    await audit(tx, { userId: adminId, action: id ? "DELIVERY_ZONE_UPDATE" : "DELIVERY_ZONE_CREATE", entity: "DeliveryZone", entityId: zone.id,
+      detail: { active: zone.isActive, districtCount: zone.districts.length, charge: zone.charge.toFixed(2) } });
+    return zone;
   });
 }
 
-export async function updateDeliveryZone(id: string, data: {
-  name?: string;
-  charge?: number;
-  estimatedDays?: string | null;
-  districts?: string[];
-  isActive?: boolean;
-}) {
-  return prisma.deliveryZone.update({ where: { id }, data });
-}
-
-export async function deleteDeliveryZone(id: string) {
-  return prisma.deliveryZone.update({ where: { id }, data: { isActive: false } });
+export async function deleteDeliveryZone(id: string, adminId: string) {
+  return prisma.$transaction(async (tx) => {
+    const zone = await tx.deliveryZone.update({ where: { id }, data: { isActive: false } });
+    await audit(tx, { userId: adminId, action: "DELIVERY_ZONE_ARCHIVE", entity: "DeliveryZone", entityId: id });
+    return zone;
+  });
 }

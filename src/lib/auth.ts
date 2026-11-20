@@ -1,47 +1,37 @@
-import NextAuth from "next-auth";
-import { PrismaAdapter } from "@auth/prisma-adapter";
+import NextAuth, { CredentialsSignin } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import bcrypt from "bcryptjs";
-import { prisma } from "@/lib/prisma";
-import { loginSchema } from "@/lib/validations/auth";
 import { authConfig } from "@/lib/auth.config";
 import { logError } from "@/lib/errors";
+import { issueSession, readSession, revokeSession, verifyCredentials } from "@/server/services/auth-security";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
-  adapter: PrismaAdapter(prisma),
-  providers: [
-    Credentials({
-      name: "credentials",
-      credentials: {
-        email: { label: "Email", type: "email" },
-        password: { label: "Password", type: "password" },
-      },
-      async authorize(credentials) {
-        const parsed = loginSchema.safeParse(credentials);
-        if (!parsed.success) return null;
-
-        try {
-          const user = await prisma.user.findUnique({
-            where: { email: parsed.data.email.toLowerCase() },
-          });
-          if (!user || !user.passwordHash || user.isBlocked) return null;
-
-          const valid = await bcrypt.compare(parsed.data.password, user.passwordHash);
-          if (!valid) return null;
-
-          return {
-            id: user.id,
-            email: user.email,
-            name: user.name,
-            role: user.role,
-          };
-        } catch (error) {
-          // A database outage must not produce an unhandled 500 on the login page.
-          logError("auth.authorize", error);
-          return null;
-        }
-      },
-    }),
-  ],
+  providers: [Credentials({
+    name: "Credentials",
+    credentials: { email: {}, password: {}, portal: {} },
+    async authorize(credentials, request) {
+      try { return await verifyCredentials(credentials, request.headers); }
+      catch (error) { logError("auth.authorize", error); return null; }
+    },
+  })],
+  callbacks: {
+    ...authConfig.callbacks,
+    async jwt({ token, user }) {
+      if (user?.id && user.role && typeof user.authVersion === "number") {
+        const { handle, expires } = await issueSession({ id: user.id, role: user.role, authVersion: user.authVersion });
+        return { ...token, id: user.id, role: user.role, authVersion: user.authVersion, handle, absoluteExpiry: expires.toISOString() };
+      }
+      if (typeof token.handle !== "string" || typeof token.id !== "string" || (token.role !== "ADMIN" && token.role !== "CUSTOMER") || typeof token.authVersion !== "number") return null;
+      try {
+        const state = await readSession(token.handle, { id: token.id, role: token.role, authVersion: token.authVersion });
+        if (!state) return null;
+        return { ...token, name: state.user.name, email: state.user.email, absoluteExpiry: state.expiresAt.toISOString() };
+      } catch (error) { logError("auth.session", error); return null; }
+    },
+  },
+  events: {
+    async signOut(message) { if ("token" in message) await revokeSession(message.token?.handle); },
+  },
+  // Auth.js exceptions may embed request credentials or backend error details.
+  logger: { error(error) { if (!(error instanceof CredentialsSignin)) logError("auth.framework", error); }, warn() {}, debug() {} },
 });

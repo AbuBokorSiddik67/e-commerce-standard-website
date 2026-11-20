@@ -121,7 +121,7 @@ export default async function AccountOrderDetailPage({
           {(["PENDING", "CONFIRMED"].includes(order.status) && ["PENDING", "FAILED"].includes(order.paymentStatus)) &&
             <CancelOrderButton orderNumber={order.orderNumber} />}
           <Button asChild variant="outline" className="w-full">
-            <Link href={`/track-order?order=${encodeURIComponent(order.orderNumber)}&phone=${encodeURIComponent(order.phone)}`}>
+            <Link href={`/track-order?order=${encodeURIComponent(order.orderNumber)}`}>
               Track order
             </Link>
           </Button>

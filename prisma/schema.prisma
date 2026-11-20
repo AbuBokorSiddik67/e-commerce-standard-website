@@ -70,6 +70,8 @@ model User {
   orders       Order[]
   auditLogs    AuditLog[]
   resetTokens  PasswordResetToken[]
+  authVersion  Int      @default(0)
+  authSessions AuthSession[]
 
   @@index([email])
 }
@@ -80,7 +82,28 @@ model PasswordResetToken {
   tokenHash String    @unique
   expiresAt DateTime
   usedAt    DateTime?
+  authVersion Int?
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AuthSession {
+  tokenHash   String @id
+  userId      String
+  authVersion Int
+  role        Role
+  expiresAt   DateTime
+  user        User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model SecurityRateBucket {
+  key       String @id
+  count     Int
+  expiresAt DateTime
+
+  @@index([expiresAt])
 }
 
 // ---------- Customer (supports guest checkout) ----------
