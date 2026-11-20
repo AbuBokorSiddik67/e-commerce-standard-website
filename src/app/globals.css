@@ -12,31 +12,31 @@
     --brand-background: #ffffff;
 
     /* shadcn/ui tokens */
-    --background: 0 0% 100%;
+    --background: 216 33% 98%;
     --foreground: 222 47% 11%;
     --card: 0 0% 100%;
     --card-foreground: 222 47% 11%;
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
-    --primary: 222 47% 11%;
+    --primary: 222 79% 47%;
     --primary-foreground: 210 40% 98%;
     --secondary: 210 40% 96%;
     --secondary-foreground: 222 47% 11%;
     --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%;
+    --muted-foreground: 218 18% 38%;
     --accent: 210 40% 96%;
     --accent-foreground: 222 47% 11%;
-    --destructive: 0 84% 60%;
+    --destructive: 0 75% 43%;
     --destructive-foreground: 210 40% 98%;
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
-    --ring: 222 47% 11%;
+    --border: 216 27% 90%;
+    --input: 216 20% 79%;
+    --ring: 222 79% 47%;
     --chart-1: 12 76% 61%;
     --chart-2: 173 58% 39%;
     --chart-3: 197 37% 24%;
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
-    --radius: 0.5rem;
+    --radius: 0.875rem;
   }
 
   .dark {
@@ -84,4 +84,33 @@
   .text-balance {
     text-wrap: balance;
   }
+}
+
+@layer components {
+  .eyebrow { @apply text-[0.68rem] font-bold uppercase tracking-[0.19em]; }
+  .display-title { font-size: clamp(2.65rem, 5vw, 4.8rem); line-height: 1.02; letter-spacing: -.075em; font-weight: 750; text-wrap: balance; }
+  .section-title { font-size: clamp(1.7rem, 3.4vw, 2.65rem); line-height: 1.08; letter-spacing: -.052em; font-weight: 720; }
+  .page-title { font-size: clamp(1.85rem, 3.5vw, 2.85rem); line-height: 1.08; letter-spacing: -.052em; font-weight: 730; }
+  .surface { @apply rounded-2xl border bg-card; box-shadow: 0 3px 12px -9px #111c3740; }
+  .skip-link { @apply fixed left-4 top-3 z-[100] -translate-y-24 rounded-lg bg-card px-4 py-3 font-semibold text-foreground shadow-lg focus:translate-y-0; }
+  .storefront { background: var(--shop-canvas, hsl(var(--background))); color: hsl(var(--foreground)); }
+  .admin-shell { --background: 216 37% 97%; --primary: 222 79% 47%; --primary-foreground: 0 0% 100%; }
+  .admin-content :where(table) { min-width: 38rem; }
+  .admin-content :where(th) { white-space: nowrap; }
+  .admin-content :where(h1) { letter-spacing: -.04em; }
+}
+
+@layer base {
+  :where(a, button, input, select, textarea, summary):focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 3px; }
+  :where(main[id]) { scroll-margin-top: 6rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+}
+
+@layer components {
+  .display-title, .page-title { overflow-wrap: anywhere; }
+  .admin-content [role="region"][tabindex="0"]:focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: -2px; }
+  .admin-content tbody tr:focus-within { background: hsl(var(--muted)); }
 }

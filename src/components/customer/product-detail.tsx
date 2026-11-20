@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import Link from "next/link";
-import { Star, Minus, Plus, ShoppingBag, Truck, ShieldCheck, RotateCcw, ChevronRight } from "lucide-react";
+import { Breadcrumbs } from "@/components/shared/page-heading";
+import { toggleWishlistAction } from "@/server/actions/account";
+import { formatCurrency } from "@/lib/utils";
+import { Star, Minus, Plus, ShoppingBag, Truck, ShieldCheck, RotateCcw, Heart } from "lucide-react";
 import { useCartStore } from "@/hooks/use-cart";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -15,6 +17,7 @@ type Review = { id: string; customerName: string; city: string | null; rating: n
 export function ProductDetail({
   product,
   settings,
+  initialWishlisted,
 }: {
   product: {
     id: string; name: string; slug: string; shortDesc: string | null; description: string | null;
@@ -23,7 +26,10 @@ export function ProductDetail({
     variants: Variant[]; reviews: Review[]; reviewCount: number;
   };
   settings: { currencySymbol: string };
+  initialWishlisted: boolean;
 }) {
+  const [wishlisted, setWishlisted] = useState(initialWishlisted);
+  const [saving, setSaving] = useState(false);
   const [activeImage, setActiveImage] = useState(0);
   const [qty, setQty] = useState(1);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
@@ -57,21 +63,25 @@ export function ProductDetail({
     toast.success("Added to cart");
   };
 
-  const avgRating = product.reviewCount > 0 ? 4 : 0;
-
+  const avgRating = product.reviews.length ? product.reviews.reduce((sum, review) => sum + review.rating, 0) / product.reviews.length : 0;
+  const money = (amount: string) => formatCurrency(Number(amount), settings.currencySymbol);
+  async function wishlist() {
+    setSaving(true);
+    try {
+      const result = await toggleWishlistAction(product.id);
+      if (!result.success) { toast.error(result.error ?? "Could not update wishlist"); return; }
+      setWishlisted(Boolean(result.wishlisted));
+      toast.success(result.wishlisted ? "Added to wishlist" : "Removed from wishlist");
+    } catch { toast.error("Could not update wishlist"); }
+    finally { setSaving(false); }
+  }
   return (
     <div>
-      <nav className="mb-6 flex items-center gap-1 text-sm text-muted-foreground">
-        <Link href="/" className="hover:text-foreground">Home</Link>
-        <ChevronRight className="h-3 w-3" />
-        <Link href="/products" className="hover:text-foreground">Products</Link>
-        <ChevronRight className="h-3 w-3" />
-        <span className="text-foreground">{product.name}</span>
-      </nav>
+      <Breadcrumbs items={[{label:"Home",href:"/"},{label:"Shop",href:"/products"},{label:product.name}]} />
 
-      <div className="grid gap-8 lg:grid-cols-2">
+      <div className="grid gap-6 md:grid-cols-2 lg:gap-10">
         <div className="space-y-4">
-          <div className="relative aspect-square overflow-hidden rounded-lg border bg-muted">
+          <div className="relative aspect-square overflow-hidden rounded-2xl border bg-muted">
             {product.images[activeImage] ? (
               <Image
                 src={product.images[activeImage].url}
@@ -79,7 +89,7 @@ export function ProductDetail({
                 fill
                 className="object-cover"
                 sizes="(max-width: 1024px) 100vw, 50vw"
-                unoptimized
+                priority={activeImage === 0}
               />
             ) : (
               <div className="flex h-full items-center justify-center text-muted-foreground">No image</div>
@@ -95,36 +105,27 @@ export function ProductDetail({
               {product.images.map((img, i) => (
                 <button
                   key={img.id}
+                  aria-label={`View image ${i + 1}`} aria-pressed={i === activeImage}
                   onClick={() => setActiveImage(i)}
                   className={`relative h-20 w-20 shrink-0 overflow-hidden rounded-md border-2 ${i === activeImage ? "border-primary" : "border-transparent"}`}
                 >
-                  <Image src={img.url} alt={img.altText ?? ""} fill className="object-cover" sizes="80px" unoptimized />
+                  <Image src={img.url} alt={img.altText ?? ""} fill className="object-cover" sizes="80px" />
                 </button>
               ))}
             </div>
           )}
         </div>
 
-        <div className="space-y-5">
+        <div className="surface space-y-5 p-4 sm:p-6 lg:p-8">
           <div>
-            <h1 className="text-2xl font-bold">{product.name}</h1>
+            <p className="eyebrow mb-2 text-primary">Product details</p><h1 className="page-title">{product.name}</h1>
             {product.shortDesc && <p className="mt-2 text-muted-foreground">{product.shortDesc}</p>}
           </div>
 
-          <div className="flex items-center gap-2">
-            <div className="flex">
-              {[1, 2, 3, 4, 5].map((s) => (
-                <Star key={s} className={`h-4 w-4 ${s <= avgRating ? "fill-yellow-400 text-yellow-400" : "text-muted"}`} />
-              ))}
-            </div>
-            <span className="text-sm text-muted-foreground">({product.reviewCount} reviews)</span>
-          </div>
-
-          <div className="flex items-baseline gap-3">
-            <span className="text-3xl font-bold">{settings.currencySymbol}{effectivePrice}</span>
-            {compareAt && parseFloat(compareAt) > parseFloat(effectivePrice) && (
-              <span className="text-lg text-muted-foreground line-through">{settings.currencySymbol}{compareAt}</span>
-            )}
+          <p className="flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground">{product.reviewCount ? <><Star className="size-4 fill-amber-500 text-amber-700" aria-hidden="true" /><strong className="text-foreground">{avgRating.toFixed(1)} / 5</strong> · {product.reviewCount} reviews</> : "No reviews yet"}</p>
+          <div className="flex flex-wrap items-baseline gap-3 tabular-nums">
+            {(!product.requiresVariant || variant) && <span className="text-3xl font-bold">{money(effectivePrice)}</span>}
+            {(!product.requiresVariant || variant) && compareAt && discount > 0 && <del className="text-lg text-muted-foreground">{money(compareAt)}</del>}
           </div>
 
           {product.variants.length > 0 && (
@@ -139,20 +140,21 @@ export function ProductDetail({
                     disabled={v.stock <= 0}
                     className={`rounded-md border px-4 py-2 text-sm transition ${selectedVariant === v.id ? "border-primary bg-primary/10" : "hover:border-foreground/30"} ${v.stock <= 0 ? "opacity-50 line-through" : ""}`}
                   >
-                    {v.value} · {settings.currencySymbol}{v.price ?? product.price}
+                    {v.value} · {money(v.price ?? product.price)}
                   </button>
                 ))}
               </div>
             </div>
           )}
 
-          <div className="flex items-center gap-4">
+          <p aria-live="polite" className="text-sm font-semibold text-muted-foreground">{needsVariant ? "Choose a variant to check availability." : isOutOfStock ? "Out of stock" : "In stock"}</p>
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <div className="flex items-center rounded-md border">
-              <button onClick={() => setQty((q) => Math.max(1, q - 1))} className="p-2 hover:bg-muted" disabled={isOutOfStock}>
+              <button aria-label="Decrease quantity" onClick={() => setQty((q) => Math.max(1, q - 1))} className="grid size-10 place-items-center hover:bg-muted" disabled={isOutOfStock || qty <= 1}>
                 <Minus className="h-4 w-4" />
               </button>
-              <span className="w-12 text-center font-medium">{qty}</span>
-              <button onClick={() => setQty((q) => Math.min(effectiveStock, q + 1))} className="p-2 hover:bg-muted" disabled={isOutOfStock}>
+              <span className="w-7 text-center text-sm font-semibold" aria-live="polite">{qty}</span>
+              <button aria-label="Increase quantity" onClick={() => setQty((q) => Math.min(effectiveStock, q + 1))} className="grid size-10 place-items-center hover:bg-muted" disabled={isOutOfStock || qty >= effectiveStock}>
                 <Plus className="h-4 w-4" />
               </button>
             </div>
@@ -160,6 +162,7 @@ export function ProductDetail({
               <ShoppingBag className="mr-2 h-4 w-4" />
               {needsVariant ? "Select a variant" : isOutOfStock ? "Out of Stock" : "Add to Cart"}
             </Button>
+            <Button size="icon" variant="outline" aria-label="Wishlist" aria-pressed={wishlisted} disabled={saving} onClick={wishlist}><Heart className={wishlisted ? "size-5 fill-rose-600 text-rose-600" : "size-5"} /></Button>
           </div>
 
           <div className="grid grid-cols-3 gap-3 border-t pt-5 text-center text-xs">
@@ -177,6 +180,7 @@ export function ProductDetail({
             </div>
           </div>
 
+          {(product.sku || product.weightGrams) && <dl className="grid gap-2 border-t pt-4 text-sm sm:grid-cols-2">{(variant?.sku || product.sku) && <div><dt className="text-xs text-muted-foreground">SKU</dt><dd className="font-semibold">{variant?.sku || product.sku}</dd></div>}{product.weightGrams && <div><dt className="text-xs text-muted-foreground">Weight</dt><dd className="font-semibold">{product.weightGrams} g</dd></div>}</dl>}
           {product.description && (
             <div className="prose prose-sm max-w-none pt-4">
               <h3 className="text-base font-semibold">Description</h3>
@@ -186,10 +190,10 @@ export function ProductDetail({
         </div>
       </div>
 
-      <section className="mt-12 border-t pt-8">
-        <div className="mb-6 flex items-center justify-between">
-          <h2 className="text-xl font-bold">Customer Reviews ({product.reviewCount})</h2>
-          <Button variant="outline" size="sm" onClick={() => setShowReviewForm((s) => !s)}>
+      <section className="surface mt-8 p-4 sm:p-7">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="section-title">Customer reviews ({product.reviewCount})</h2>
+          <Button variant="outline" size="sm" aria-expanded={showReviewForm} onClick={() => setShowReviewForm((s) => !s)}>
             Write a Review
           </Button>
         </div>
@@ -203,9 +207,9 @@ export function ProductDetail({
             {product.reviews.map((r) => (
               <div key={r.id} className="border-b pb-4">
                 <div className="flex items-center gap-2">
-                  <div className="flex">
+                  <div className="flex" aria-label={`${r.rating} out of 5 stars`}>
                     {[1, 2, 3, 4, 5].map((s) => (
-                      <Star key={s} className={`h-4 w-4 ${s <= r.rating ? "fill-yellow-400 text-yellow-400" : "text-muted"}`} />
+                      <Star key={s} aria-hidden="true" className={`h-4 w-4 ${s <= r.rating ? "fill-yellow-400 text-yellow-400" : "text-muted"}`} />
                     ))}
                   </div>
                   <span className="font-medium">{r.customerName}</span>

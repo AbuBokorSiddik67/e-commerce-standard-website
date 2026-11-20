@@ -27,7 +27,7 @@ export default async function AdminCouponsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">Coupons</h1>
+        <h1 className="page-title">Coupons</h1>
         <p className="text-sm text-muted-foreground">Discount codes customers can apply at checkout</p>
       </div>
       <CouponManager products={products} categories={categories} coupons={coupons.map((c) => ({

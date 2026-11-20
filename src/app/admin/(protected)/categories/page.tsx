@@ -23,7 +23,7 @@ export default async function AdminCategoriesPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">Categories</h1>
+        <h1 className="page-title">Categories</h1>
         <p className="text-sm text-muted-foreground">Organize your products into collections</p>
       </div>
       <CategoryManager categories={categories as never} />

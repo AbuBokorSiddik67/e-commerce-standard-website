@@ -20,10 +20,11 @@ type Category = { id: string; name: string };
 type Variant = { id?: string; originalStock?: number; name: string; value: string; sku: string; price: string; stock: number };
 
 export function ProductForm({
-  product, categories,
+  product, categories, currency = "৳",
 }: {
   product?: SafeProduct | null;
   categories: Category[];
+  currency?: string;
 }) {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
@@ -90,10 +91,10 @@ export function ProductForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="space-y-6 lg:col-span-2">
-          <Card>
+    <form onSubmit={handleSubmit} className="min-w-0 space-y-4">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+        <div className="min-w-0 space-y-4 xl:col-span-2">
+          <Card className="surface min-w-0">
             <CardHeader><CardTitle className="text-base">Basic Information</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
@@ -115,11 +116,11 @@ export function ProductForm({
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="surface min-w-0">
             <CardHeader><CardTitle className="text-base">Pricing</CardTitle></CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-3">
               <div className="space-y-2">
-                <Label htmlFor="price">Price (৳) *</Label>
+                <Label htmlFor="price">Price ({currency}) *</Label>
                 <Input id="price" type="number" min="0" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} required />
               </div>
               <div className="space-y-2">
@@ -133,7 +134,7 @@ export function ProductForm({
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="surface min-w-0">
             <CardHeader><CardTitle className="text-base">Images</CardTitle></CardHeader>
             <CardContent>
               <ImageUploader
@@ -144,7 +145,7 @@ export function ProductForm({
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="surface min-w-0">
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-base">Variants</CardTitle>
               <Button type="button" variant="outline" size="sm" onClick={() => setVariants([...variants, { name: "Size", value: "", sku: "", price: "", stock: 0 }])}>
@@ -154,13 +155,13 @@ export function ProductForm({
             <CardContent className="space-y-3">
               <p className="text-sm text-muted-foreground">Variant products use each variant’s stock. Removing a variant archives it, so existing orders can still restore stock.</p>
               {variants.map((v, i) => (
-                <div key={v.id ?? i} className="grid grid-cols-2 gap-2 sm:grid-cols-6">
-                  <Input placeholder="Name (e.g. Size)" value={v.name} onChange={(e) => setVariants(variants.map((vv, idx) => idx === i ? { ...vv, name: e.target.value } : vv))} />
-                  <Input placeholder="Value (e.g. L)" value={v.value} onChange={(e) => setVariants(variants.map((vv, idx) => idx === i ? { ...vv, value: e.target.value } : vv))} />
-                  <Input placeholder="Variant SKU" value={v.sku} onChange={(e) => setVariants(variants.map((vv, idx) => idx === i ? { ...vv, sku: e.target.value } : vv))} />
-                  <Input placeholder="Price" type="number" min="0" step="0.01" value={v.price} onChange={(e) => setVariants(variants.map((vv, idx) => idx === i ? { ...vv, price: e.target.value } : vv))} />
-                  <Input placeholder="Stock" type="number" min="0" step="1" value={v.stock} onChange={(e) => setVariants(variants.map((vv, idx) => idx === i ? { ...vv, stock: Number(e.target.value) } : vv))} />
-                  <Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => setVariants(variants.filter((_, idx) => idx !== i))}>
+                <div key={v.id ?? i} className="grid grid-cols-2 gap-2 rounded-xl border bg-muted/25 p-3 md:grid-cols-3">
+                  <Input aria-label={`Variant ${i + 1} Option name`} placeholder="Name (e.g. Size)" value={v.name} onChange={(e) => setVariants(variants.map((vv, idx) => idx === i ? { ...vv, name: e.target.value } : vv))} />
+                  <Input aria-label={`Variant ${i + 1} Option value`} placeholder="Value (e.g. L)" value={v.value} onChange={(e) => setVariants(variants.map((vv, idx) => idx === i ? { ...vv, value: e.target.value } : vv))} />
+                  <Input aria-label={`Variant ${i + 1} SKU`} placeholder="Variant SKU" value={v.sku} onChange={(e) => setVariants(variants.map((vv, idx) => idx === i ? { ...vv, sku: e.target.value } : vv))} />
+                  <Input aria-label={`Variant ${i + 1} Price`} placeholder="Price" type="number" min="0" step="0.01" value={v.price} onChange={(e) => setVariants(variants.map((vv, idx) => idx === i ? { ...vv, price: e.target.value } : vv))} />
+                  <Input aria-label={`Variant ${i + 1} Stock`} placeholder="Stock" type="number" min="0" step="1" value={v.stock} onChange={(e) => setVariants(variants.map((vv, idx) => idx === i ? { ...vv, stock: Number(e.target.value) } : vv))} />
+                  <Button type="button" variant="ghost" size="icon" aria-label={`Archive variant ${i + 1}`} className="text-destructive" onClick={() => setVariants(variants.filter((_, idx) => idx !== i))}>
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
@@ -169,8 +170,8 @@ export function ProductForm({
           </Card>
         </div>
 
-        <div className="space-y-6">
-          <Card>
+        <div className="min-w-0 space-y-4">
+          <Card className="surface min-w-0">
             <CardHeader><CardTitle className="text-base">Status</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between">
@@ -184,7 +185,7 @@ export function ProductForm({
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="surface min-w-0">
             <CardHeader><CardTitle className="text-base">Inventory</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
@@ -202,7 +203,7 @@ export function ProductForm({
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="surface min-w-0">
             <CardHeader><CardTitle className="text-base">Categories</CardTitle></CardHeader>
             <CardContent className="space-y-2">
               {categories.map((c) => (
@@ -221,7 +222,7 @@ export function ProductForm({
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="surface min-w-0">
             <CardHeader><CardTitle className="text-base">SEO</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
@@ -237,7 +238,7 @@ export function ProductForm({
         </div>
       </div>
 
-      <div className="flex gap-3">
+      <div className="flex flex-wrap gap-3">
         <Button type="submit" disabled={saving}>
           {saving && <Loader2 className="h-4 w-4 animate-spin" />}
           {product ? "Update Product" : "Create Product"}

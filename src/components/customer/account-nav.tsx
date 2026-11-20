@@ -17,19 +17,20 @@ export function AccountNav({ email }: { email?: string | null }) {
   const pathname = usePathname();
 
   return (
-    <div className="mb-6 flex flex-col gap-4 border-b pb-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="surface mb-6 flex flex-col gap-4 p-4 sm:p-6 lg:flex-row lg:items-center lg:justify-between">
       <div>
-        <h1 className="text-2xl font-bold">My Account</h1>
-        {email && <p className="text-sm text-muted-foreground">{email}</p>}
+        <p className="eyebrow mb-1 text-primary">Customer workspace</p><h1 className="page-title">My account</h1>
+        {email && <p className="break-all text-sm text-muted-foreground">{email}</p>}
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <nav className="flex flex-wrap gap-1">
+        <nav aria-label="Account" className="flex flex-wrap gap-1">
           {TABS.map((tab) => {
-            const active = pathname === tab.href;
+            const active = pathname === tab.href || (tab.href !== "/account" && pathname.startsWith(`${tab.href}/`));
             return (
               <Link
                 key={tab.href}
                 href={tab.href}
+                aria-current={active ? "page" : undefined}
                 className={cn(
                   "rounded-md px-3 py-2 text-sm font-medium transition-colors",
                   active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent",

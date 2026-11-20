@@ -29,5 +29,5 @@ export default async function CheckoutPage() {
     isActive: z.isActive,
     districts: z.districts,
   }));
-  return <CheckoutClient zones={safeZones} codEnabled={settings.codEnabled} />;
+  return <CheckoutClient zones={safeZones} codEnabled={settings.codEnabled} currency={settings.currencySymbol} />;
 }

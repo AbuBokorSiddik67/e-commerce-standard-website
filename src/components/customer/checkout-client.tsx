@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
+import { PageHeading } from "@/components/shared/page-heading";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Truck, ShieldCheck, Loader2 } from "lucide-react";
@@ -23,7 +24,7 @@ async function intentHash(input: unknown) {
   return Array.from(new Uint8Array(hash), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-export default function CheckoutClient({ zones, codEnabled }: { zones: SafeDeliveryZone[]; codEnabled: boolean }) {
+export default function CheckoutClient({ zones, codEnabled, currency }: { zones: SafeDeliveryZone[]; codEnabled: boolean; currency: string }) {
   const items = useCartStore((s) => s.items);
   const clearCart = useCartStore((s) => s.clearCart);
   const couponCode = useCartStore((s) => s.couponCode);
@@ -115,11 +116,11 @@ export default function CheckoutClient({ zones, codEnabled }: { zones: SafeDeliv
 
   return (
     <div className="container-page py-8">
-      <h1 className="mb-8 text-2xl font-bold">Checkout</h1>
-      <form onSubmit={handleSubmit} onChange={() => setDisplayQuote(undefined)} className="grid gap-8 lg:grid-cols-3">
-        <div className="space-y-6 lg:col-span-2">
-          <div className="rounded-lg border p-6 space-y-4">
-            <h2 className="font-semibold">Delivery Information</h2>
+      <PageHeading label="Your order · Delivery and payment" title="Checkout" description="Enter your delivery details, then review the total before placing your order." />
+      <form onSubmit={handleSubmit} onChange={() => setDisplayQuote(undefined)} className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_22rem] lg:gap-8">
+        <div className="min-w-0 space-y-4">
+          <div className="surface space-y-4 p-4 sm:p-6">
+            <h2 className="text-lg font-bold tracking-tight">1. Contact & delivery address</h2>
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <Label htmlFor="fullName">Full Name *</Label>
@@ -127,7 +128,7 @@ export default function CheckoutClient({ zones, codEnabled }: { zones: SafeDeliv
               </div>
               <div>
                 <Label htmlFor="phone">Phone Number *</Label>
-                <Input id="phone" name="phone" placeholder="01XXXXXXXXX" type="tel" autoComplete="tel-national" pattern="01[3-9][0-9]{8}" maxLength={11} required />
+                <Input id="phone" name="phone" placeholder="01XXXXXXXXX" aria-describedby="phone-help" type="tel" autoComplete="tel-national" pattern="01[3-9][0-9]{8}" maxLength={11} required /><p id="phone-help" className="mt-1 text-xs text-muted-foreground">Use your 11-digit Bangladesh mobile number.</p>
               </div>
             </div>
             <div>
@@ -157,34 +158,35 @@ export default function CheckoutClient({ zones, codEnabled }: { zones: SafeDeliv
             </div>
           </div>
 
-          <div className="rounded-lg border p-6 space-y-4">
-            <h2 className="font-semibold">Delivery Zone *</h2>
-            <div className="space-y-2">
-              {!district && <p className="text-sm text-muted-foreground">Select a district to see delivery options.</p>}
+          <div className="surface space-y-4 p-4 sm:p-6">
+            <h2 id="delivery-options" className="text-lg font-bold tracking-tight">2. Delivery option</h2>
+            <div className="space-y-2" role="group" aria-labelledby="delivery-options">
+              {zones.length === 0 && <p className="text-sm text-destructive" role="status">No delivery options are configured. <Link href="/contact" className="underline">Contact us</Link> for help.</p>}
+              {!district && zones.length > 0 && <p className="text-sm text-muted-foreground">Select a district to see delivery options.</p>}
               {district && availableZones.length === 0 && <p className="text-sm text-muted-foreground">Delivery is not currently available for this district.</p>}
               {availableZones.map((z) => (
                 <label key={z.id} className={`flex cursor-pointer items-center justify-between rounded-md border p-3 transition ${zoneId === z.id ? "border-primary bg-primary/5" : "hover:border-foreground/30"}`}>
                   <div className="flex items-center gap-3">
-                    <input type="radio" name="zoneRadio" checked={zoneId === z.id} onChange={() => setZoneId(z.id)} className="h-4 w-4" />
+                    <input type="radio" name="zoneRadio" checked={zoneId === z.id} onChange={() => setZoneId(z.id)} className="size-4 accent-primary" />
                     <div>
                       <span className="font-medium">{z.name}</span>
                       {z.estimatedDays && <span className="block text-sm text-muted-foreground">{z.estimatedDays}</span>}
                     </div>
                   </div>
-                  <span className="font-semibold">৳{z.charge}</span>
+                  <span className="font-semibold">{currency}{z.charge}</span>
                 </label>
               ))}
             </div>
           </div>
 
-          <div className="rounded-lg border p-6 space-y-4">
+          <div className="surface space-y-4 p-4 sm:p-6">
             <h2 className="font-semibold">Order Notes (optional)</h2>
-            <Textarea name="notes" rows={2} maxLength={500} placeholder="Any special instructions for delivery..." />
+            <Textarea aria-label="Order notes" name="notes" rows={2} maxLength={500} placeholder="Any special instructions for delivery..." />
           </div>
         </div>
 
         <div className="space-y-4">
-          <div className="rounded-lg border p-5 space-y-4">
+          <div className="surface space-y-4 p-4 sm:p-5">
             <div className="flex items-center justify-between gap-2"><h2 className="font-semibold">Order Summary</h2>
               <Link href="/cart" className="text-sm underline">Edit cart</Link>
             </div>
@@ -192,15 +194,15 @@ export default function CheckoutClient({ zones, codEnabled }: { zones: SafeDeliv
               {items.map((item) => (
                 <div key={`${item.productId}-${item.variantId ?? ""}`} className="flex justify-between">
                   <span className="text-muted-foreground">{item.name}{item.variantName ? ` (${item.variantName})` : ""} × {item.quantity}</span>
-                  <span>{displayQuote ? `৳${displayQuote.lines.find((line) => line.productId === item.productId && (line.variantId ?? "") === (item.variantId ?? ""))?.lineTotal ?? "—"}` : "—"}</span>
+                  <span>{displayQuote ? `${currency}${displayQuote.lines.find((line) => line.productId === item.productId && (line.variantId ?? "") === (item.variantId ?? ""))?.lineTotal ?? "—"}` : "—"}</span>
                 </div>
               ))}
             </div>
-            <div className="space-y-2 border-t pt-3 text-sm">
-              <div className="flex justify-between"><span>Subtotal</span><span>{displayQuote ? `৳${displayQuote.subtotal}` : "Review total"}</span></div>
-              {couponCode && <div className="flex justify-between"><span>Discount ({couponCode}) <button type="button" className="underline" onClick={() => { setCoupon(null); setDisplayQuote(undefined); }}>Remove</button></span><span>{displayQuote ? `−৳${displayQuote.discount}` : "—"}</span></div>}
-              <div className="flex justify-between"><span>Delivery</span><span>{displayQuote ? `৳${displayQuote.shipping}` : "—"}</span></div>
-              <div className="flex justify-between border-t pt-2 text-base font-bold"><span>Payable on delivery</span><span>{displayQuote ? `৳${displayQuote.total}` : "—"}</span></div>
+            <div className="space-y-2 border-t pt-3 text-sm tabular-nums" aria-live="polite">
+              <div className="flex justify-between"><span>Subtotal</span><span>{displayQuote ? `${currency}${displayQuote.subtotal}` : "Review total"}</span></div>
+              {couponCode && <div className="flex justify-between"><span>Discount ({couponCode}) <button type="button" className="underline" onClick={() => { setCoupon(null); setDisplayQuote(undefined); }}>Remove</button></span><span>{displayQuote ? `−${currency}${displayQuote.discount}` : "—"}</span></div>}
+              <div className="flex justify-between"><span>Delivery</span><span>{displayQuote ? `${currency}${displayQuote.shipping}` : "—"}</span></div>
+              <div className="flex justify-between border-t pt-2 text-base font-bold"><span>Payable on delivery</span><span>{displayQuote ? `${currency}${displayQuote.total}` : "—"}</span></div>
             </div>
             {!codEnabled && <p className="text-sm text-destructive">Cash on delivery is currently unavailable.</p>}
             <Button type="submit" className="w-full" size="lg" disabled={loading || !zoneId || !codEnabled}>

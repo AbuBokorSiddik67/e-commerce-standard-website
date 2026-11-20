@@ -1,13 +1,15 @@
 import "./globals.css";
 import type { Metadata } from "next";
 
-import { Inter } from "next/font/google";
+import localFont from "next/font/local";
 import { Toaster } from "@/components/ui/sonner";
 import { GlobalErrorListener } from "@/components/shared/global-error-listener";
 import { getStoreSettings } from "@/server/repositories/settings.repo";
 import { DEFAULT_STORE_SETTINGS } from "@/config/site";
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
+const inter = localFont({ src: "./fonts/inter-latin.woff2", weight: "100 900", display: "swap", variable: "--font-inter" });
+
+const bengali = localFont({ src: "./fonts/noto-sans-bengali.woff2", weight: "100 900", display: "swap", variable: "--font-bengali", preload: false });
 
 export async function generateMetadata(): Promise<Metadata> {
   try {
@@ -46,28 +48,11 @@ export default async function RootLayout({
 
   return (
     <html lang="en" suppressHydrationWarning>
-      <head>
-        <style
-          dangerouslySetInnerHTML={{
-            __html: `
-              :root {
-                --primary: ${settings.primaryHsl};
-                --accent: ${settings.accentHsl};
-                --ring: ${settings.primaryHsl};
-                --brand-primary: ${settings.primaryColor};
-                --brand-accent: ${settings.accentColor};
-                --brand-button: ${settings.buttonColor};
-                --brand-text: ${settings.textColor};
-                --brand-background: ${settings.backgroundColor};
-              }
-            `,
-          }}
-        />
-      </head>
       <body
-        className={`${inter.variable} font-sans antialiased`}
-        style={{ fontFamily: `"${fontFamily}", var(--font-inter), ui-sans-serif, system-ui, sans-serif` }}
+        className={`${inter.variable} ${bengali.variable} font-sans antialiased`}
+        style={{ fontFamily: fontFamily === "Inter" ? "var(--font-inter), var(--font-bengali), system-ui, sans-serif" : `"${fontFamily}", var(--font-inter), var(--font-bengali), system-ui, sans-serif` }}
       >
+        <a href="#main-content" className="skip-link">Skip to content</a>
         {children}
         <GlobalErrorListener />
         <Toaster position="top-center" richColors />

@@ -151,14 +151,13 @@ export async function getHomepageData() {
             : await getFeaturedProducts(limit);
           break;
         case "HERO": {
-          const [slides, side, offer] = await Promise.all([
+          const [slides, side] = await Promise.all([
             getActiveBanners("home_hero"),
             getActiveBanners("home_side"),
-            getActiveBanners("home_mid"),
           ]);
           data[section.sectionKey] = {
             slides,
-            side: side.length ? side.slice(0, 2) : offer.slice(0, 2),
+            side: side.slice(0, 2),
           };
           break;
         }

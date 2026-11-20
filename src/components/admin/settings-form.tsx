@@ -53,7 +53,7 @@ export function SettingsForm({ settings, zones }: { settings: StoreSettings; zon
   return (
     <form onSubmit={submit}>
       <Tabs defaultValue="branding">
-        <TabsList className="flex-wrap">
+        <TabsList aria-label="Store settings sections" className="grid h-auto w-full grid-cols-2 gap-1 sm:inline-flex sm:w-auto">
           <TabsTrigger value="branding">Branding</TabsTrigger>
           <TabsTrigger value="contact">Contact</TabsTrigger>
           <TabsTrigger value="policies">Policies</TabsTrigger>

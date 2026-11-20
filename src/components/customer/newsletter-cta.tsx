@@ -1,6 +1,7 @@
 "use client";
 
 import { safeLink } from "@/lib/safe-urls";
+import { Mail } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -51,14 +52,15 @@ export function NewsletterCta({
   }
 
   return (
-    <section className="bg-primary py-12 text-primary-foreground">
-      <div className="container-page grid items-center gap-8 lg:grid-cols-2">
+    <section className="container-page py-7 sm:py-10">
+      <div className="grid items-center gap-6 rounded-[1.5rem] bg-[#182744] p-5 text-white sm:p-8 lg:grid-cols-2 lg:gap-12 lg:p-10">
         <div>
+          <div className="mb-4 flex items-center gap-2 text-[#c7d8ff]"><Mail className="size-4" aria-hidden="true" /><p className="eyebrow">In your inbox</p></div>
           {section.title && (
-            <h2 className="text-2xl font-bold sm:text-3xl">{section.title}</h2>
+            <h2 className="section-title">{section.title}</h2>
           )}
           {section.subtitle && (
-            <p className="mt-2 text-sm text-primary-foreground/80 sm:text-base">{section.subtitle}</p>
+            <p className="mt-2 text-sm text-[#d7e1f4] sm:text-base">{section.subtitle}</p>
           )}
           {whatsappUrl && (
             <Button asChild variant="secondary" className="mt-5">
@@ -68,13 +70,13 @@ export function NewsletterCta({
             </Button>
           )}
         </div>
-        <form onSubmit={handleSubmit} className="space-y-3 rounded-xl bg-background p-5 text-foreground">
+        <form onSubmit={handleSubmit} className="space-y-3 rounded-xl bg-card p-5 text-foreground">
           <div>
             <Label htmlFor={`newsletter-email-${section.id}`}>Email</Label>
             <Input
               id={`newsletter-email-${section.id}`}
               name="email"
-              type="email"
+              type="email" autoComplete="email" maxLength={254}
               placeholder="you@example.com"
               required
             />
@@ -83,7 +85,7 @@ export function NewsletterCta({
             <Label htmlFor={`newsletter-phone-${section.id}`}>Phone (optional)</Label>
             <Input
               id={`newsletter-phone-${section.id}`}
-              name="phone"
+              name="phone" type="tel" autoComplete="tel-national"
               placeholder="01XXXXXXXXX"
             />
           </div>

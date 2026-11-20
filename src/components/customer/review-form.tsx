@@ -38,16 +38,16 @@ export function ReviewForm({ productId, onDone }: { productId: string; onDone: (
 
   return (
     <form onSubmit={handleSubmit} className="mb-6 space-y-4 rounded-lg border p-4">
-      <div>
-        <Label>Rating</Label>
+      <fieldset>
+        <legend className="text-sm font-semibold">Rating</legend>
         <div className="mt-1 flex gap-1">
           {[1, 2, 3, 4, 5].map((s) => (
-            <button key={s} type="button" onMouseEnter={() => setHover(s)} onMouseLeave={() => setHover(0)} onClick={() => setRating(s)}>
-              <Star className={`h-6 w-6 ${(hover || rating) >= s ? "fill-yellow-400 text-yellow-400" : "text-muted"}`} />
+            <button key={s} type="button" aria-label={`${s} ${s === 1 ? "star" : "stars"}`} aria-pressed={rating === s} className="grid size-10 place-items-center rounded-lg hover:bg-muted" onMouseEnter={() => setHover(s)} onMouseLeave={() => setHover(0)} onClick={() => setRating(s)}>
+              <Star aria-hidden="true" className={`h-6 w-6 ${(hover || rating) >= s ? "fill-yellow-400 text-yellow-400" : "text-muted"}`} />
             </button>
           ))}
         </div>
-      </div>
+      </fieldset>
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <Label htmlFor="customerName">Your Name</Label>
@@ -64,7 +64,7 @@ export function ReviewForm({ productId, onDone }: { productId: string; onDone: (
       </div>
       <div>
         <Label htmlFor="body">Review</Label>
-        <Textarea id="body" name="body" rows={3} />
+        <Textarea id="body" name="body" rows={3} required />
       </div>
       <Button type="submit" disabled={loading}>{loading ? "Submitting..." : "Submit Review"}</Button>
     </form>

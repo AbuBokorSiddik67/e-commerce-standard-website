@@ -9,7 +9,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Store } from "lucide-react";
 
@@ -44,13 +44,13 @@ export default function AdminLoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/40 p-4">
-      <Card className="w-full max-w-sm">
+    <main id="main-content" tabIndex={-1} className="admin-shell flex min-h-screen items-center justify-center bg-[#ecf1fa] p-4">
+      <Card className="surface w-full max-w-sm border-t-4 border-t-primary">
         <CardHeader className="text-center">
           <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground">
             <Store className="h-6 w-6" />
           </div>
-          <CardTitle className="text-xl">Admin Login</CardTitle>
+          <h1 className="page-title">Admin login</h1>
           <CardDescription>Sign in to manage your store</CardDescription>
         </CardHeader>
         <CardContent>
@@ -75,6 +75,6 @@ export default function AdminLoginPage() {
           </form>
         </CardContent>
       </Card>
-    </div>
+    </main>
   );
 }
