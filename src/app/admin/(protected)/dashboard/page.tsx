@@ -1,3 +1,5 @@
+import { bangladeshDate, bangladeshDayStart } from "@/lib/report-dates";
+import { getOrderMetrics, listLowStock } from "@/server/services/order-metrics";
 import Link from "next/link";
 import { requireAdmin } from "@/lib/auth-guard";
 import { prisma } from "@/lib/prisma";
@@ -14,23 +16,13 @@ import {
 export default async function AdminDashboardPage() {
   await requireAdmin();
 
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
+  const todayStart = bangladeshDayStart(bangladeshDate());
 
   const dashboardData = await attempt("admin.dashboard", () => Promise.all([
     prisma.order.count({ where: { placedAt: { gte: todayStart }, status: { notIn: ["CANCELLED", "RETURNED"] } } }),
-    prisma.order.count({ where: { status: { notIn: ["CANCELLED", "RETURNED"] } } }),
-    prisma.order.aggregate({
-      where: { status: { notIn: ["CANCELLED", "RETURNED"] } },
-      _sum: { total: true },
-    }),
+    getOrderMetrics(),
     prisma.order.count({ where: { status: { in: ["PENDING", "CONFIRMED", "PACKED", "SHIPPED"] } } }),
-    prisma.product.count(),
-    prisma.product.findMany({
-      where: { isActive: true },
-      orderBy: { stock: "asc" },
-      take: 5,
-    }),
+    listLowStock(5),
     prisma.order.findMany({
       orderBy: { placedAt: "desc" },
       take: 5,
@@ -48,13 +40,15 @@ export default async function AdminDashboardPage() {
     );
   }
 
-  const [ordersToday, totalOrders, revenueAgg, pendingCount, productCount, lowStock, recentOrders] =
+  const [ordersToday, metrics, pendingCount, lowStock, recentOrders] =
     dashboardData.value;
 
   const stats = [
     { title: "Orders Today", value: ordersToday.toString(), icon: ShoppingBag },
-    { title: "Total Orders", value: totalOrders.toString(), icon: TrendingUp },
-    { title: "Revenue", value: formatCurrency(Number(revenueAgg._sum.total ?? 0)), icon: Banknote },
+    { title: "Total Orders", value: metrics.totalOrders.toString(), icon: TrendingUp },
+    { title: "Order Value", value: formatCurrency(metrics.orderValue), icon: Banknote },
+    { title: "Pending COD", value: formatCurrency(metrics.pendingCod), icon: Banknote },
+    { title: "Collected COD", value: formatCurrency(metrics.collectedCod), icon: Banknote },
     { title: "Active Orders", value: pendingCount.toString(), icon: Package },
   ];
 

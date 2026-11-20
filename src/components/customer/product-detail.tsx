@@ -18,7 +18,7 @@ export function ProductDetail({
 }: {
   product: {
     id: string; name: string; slug: string; shortDesc: string | null; description: string | null;
-    price: string; compareAtPrice: string | null; sku: string | null; stock: number; weightGrams: number | null;
+    requiresVariant: boolean; price: string; compareAtPrice: string | null; sku: string | null; stock: number; weightGrams: number | null;
     images: { id: string; url: string; altText: string | null }[];
     variants: Variant[]; reviews: Review[]; reviewCount: number;
   };
@@ -32,7 +32,8 @@ export function ProductDetail({
 
   const variant = product.variants.find((v) => v.id === selectedVariant);
   const effectivePrice = variant?.price ?? product.price;
-  const effectiveStock = variant ? variant.stock : product.stock;
+  const effectiveStock = Math.min(100, variant?.stock ?? (product.requiresVariant ? 0 : product.stock));
+  const needsVariant = product.requiresVariant && !variant && product.variants.some((option) => option.stock > 0);
   const isOutOfStock = effectiveStock <= 0;
 
   const compareAt = product.compareAtPrice;
@@ -48,7 +49,7 @@ export function ProductDetail({
       slug: product.slug,
       price: parseFloat(effectivePrice),
       image: product.images[0]?.url ?? null,
-      quantity: qty,
+      quantity: Math.min(qty, effectiveStock),
       variantId: selectedVariant ?? undefined,
       variantName: variant ? `${variant.name}: ${variant.value}` : undefined,
       maxStock: effectiveStock,
@@ -133,11 +134,12 @@ export function ProductDetail({
                 {product.variants.map((v) => (
                   <button
                     key={v.id}
+                    aria-pressed={selectedVariant === v.id}
                     onClick={() => { setSelectedVariant(v.id); setQty(1); }}
                     disabled={v.stock <= 0}
                     className={`rounded-md border px-4 py-2 text-sm transition ${selectedVariant === v.id ? "border-primary bg-primary/10" : "hover:border-foreground/30"} ${v.stock <= 0 ? "opacity-50 line-through" : ""}`}
                   >
-                    {v.value}
+                    {v.value} · {settings.currencySymbol}{v.price ?? product.price}
                   </button>
                 ))}
               </div>
@@ -156,7 +158,7 @@ export function ProductDetail({
             </div>
             <Button onClick={handleAddToCart} disabled={isOutOfStock} size="lg" className="flex-1">
               <ShoppingBag className="mr-2 h-4 w-4" />
-              {isOutOfStock ? "Out of Stock" : "Add to Cart"}
+              {needsVariant ? "Select a variant" : isOutOfStock ? "Out of Stock" : "Add to Cart"}
             </Button>
           </div>
 

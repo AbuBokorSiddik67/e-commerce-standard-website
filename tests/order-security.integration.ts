@@ -25,6 +25,7 @@ test("PostgreSQL order ownership and receipt boundaries", async (t) => {
   const { createOrder, getOrderReceipt } = await import("../src/server/services/order.service");
   t.after(() => prisma.$disconnect());
 
+  await prisma.storeSetting.upsert({ where: { id: 1 }, create: { id: 1, storeName: "Test store" }, update: {} });
   const runId = randomUUID();
   const [accountA, accountB, product, zone] = await Promise.all([
     prisma.user.create({
@@ -36,12 +37,12 @@ test("PostgreSQL order ownership and receipt boundaries", async (t) => {
     // A user without a Customer row must never acquire a guest's Customer row.
     prisma.user.create({ data: { email: `b-${runId}@example.test`, role: "CUSTOMER" } }),
     prisma.product.create({ data: { slug: `fixture-${runId}`, name: "Fixture product", price: 100, stock: 10 } }),
-    prisma.deliveryZone.create({ data: { name: `Fixture zone ${runId}`, charge: 50 } }),
+    prisma.deliveryZone.create({ data: { name: `Fixture zone ${runId}`, charge: 50, districts: ["Dhaka"] } }),
   ]);
 
   const checkoutInput = () => ({
     fullName: "Fixture delivery", phone: sharedDeliveryPhone, address: "Synthetic address",
-    district: "Dhaka", city: "Dhaka", zoneId: zone.id,
+    district: "Dhaka" as const, city: "Dhaka", zoneId: zone.id,
     idempotencyKey: randomUUID(), items: [{ productId: product.id, quantity: 1 }],
   });
   const buyerA = { kind: "customer", userId: accountA.id } as const;

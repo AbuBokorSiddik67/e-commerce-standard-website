@@ -1,3 +1,4 @@
+import { catalogAvailability } from "@/lib/product-availability";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getStoreSettings } from "@/server/repositories/settings.repo";
@@ -54,10 +55,10 @@ export default async function ProductDetailPage({
       where: { slug },
       include: {
         images: { orderBy: { sortOrder: "asc" } },
-        variants: true,
+        variants: { where: { isActive: true } },
         categories: true,
         reviews: { where: { isApproved: true }, orderBy: { createdAt: "desc" } },
-        _count: { select: { reviews: true } },
+        _count: { select: { reviews: true, variants: true } },
       },
     }),
   );
@@ -104,9 +105,9 @@ export default async function ProductDetailPage({
     offers: {
       "@type": "Offer",
       priceCurrency: "BDT",
-      price: product.price.toString(),
+      price: catalogAvailability(product).price,
       availability:
-        product.stock > 0
+        catalogAvailability(product).stock > 0
           ? "https://schema.org/InStock"
           : "https://schema.org/OutOfStock",
       url: `${base}/product/${product.slug}`,
@@ -139,6 +140,7 @@ export default async function ProductDetailPage({
           compareAtPrice: product.compareAtPrice?.toString() ?? null,
           sku: product.sku,
           stock: product.stock,
+          requiresVariant: product._count.variants > 0,
           weightGrams: product.weightGrams,
           images: product.images.map((i) => ({ id: i.id, url: i.url, altText: i.altText })),
           variants: product.variants.map((v) => ({
@@ -174,11 +176,10 @@ export default async function ProductDetailPage({
                   id: p.id,
                   name: p.name,
                   slug: p.slug,
-                  price: p.price.toString(),
+                  ...catalogAvailability(p),
                   compareAtPrice: p.compareAtPrice?.toString() ?? null,
                   images: p.images,
-                  stock: p.stock,
-                  isActive: p.isActive,
+                                    isActive: p.isActive,
                 }}
                 currencySymbol={settings.currencySymbol}
               />

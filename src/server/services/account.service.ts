@@ -138,6 +138,8 @@ export async function listWishlist(userId: string) {
       product: {
         include: {
           images: { orderBy: { sortOrder: "asc" }, take: 1 },
+          variants: { where: { isActive: true }, select: { stock: true, price: true } },
+          _count: { select: { variants: true } },
         },
       },
     },

@@ -20,6 +20,7 @@ type ProductCardData = {
   compareAtPrice?: string | number | null;
   images: { url: string }[];
   stock: number;
+  requiresVariant: boolean;
   isActive: boolean;
   isNew?: boolean;
 };
@@ -45,13 +46,14 @@ export function ProductCard({
   const price = Number(product.price);
   const compareAt = product.compareAtPrice ? Number(product.compareAtPrice) : null;
   const discount = compareAt && compareAt > price ? Math.round(((compareAt - price) / compareAt) * 100) : 0;
-  const outOfStock = product.stock <= 0;
+  const outOfStock = !product.isActive || product.stock <= 0;
   const image = product.images[0]?.url;
 
   function addToCart(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
     if (outOfStock) { toast.error("Out of stock"); return; }
+    if (product.requiresVariant) { router.push(`/product/${product.slug}`); return; }
     setAdding(true);
     addItem({
       productId: product.id,
@@ -60,7 +62,7 @@ export function ProductCard({
       price,
       image: image ?? null,
       quantity: 1,
-      maxStock: product.stock,
+      maxStock: Math.min(100, product.stock),
     });
     toast.success("Added to cart");
     setTimeout(() => setAdding(false), 500);
@@ -113,7 +115,7 @@ export function ProductCard({
       <div className="flex flex-1 flex-col p-3">
         <h3 className="line-clamp-2 text-sm font-medium leading-snug">{product.name}</h3>
         <div className="mt-1 flex items-baseline gap-2">
-          <span className="font-semibold">{formatCurrency(price, currencySymbol)}</span>
+          <span className="font-semibold">{product.requiresVariant ? "From " : ""}{formatCurrency(price, currencySymbol)}</span>
           {compareAt && compareAt > price && (
             <span className="text-xs text-muted-foreground line-through">{formatCurrency(compareAt, currencySymbol)}</span>
           )}
@@ -125,7 +127,7 @@ export function ProductCard({
             onClick={addToCart}
             disabled={outOfStock || adding}
           >
-            <ShoppingCart className="h-4 w-4" /> {adding ? "Added!" : "Add to Cart"}
+            <ShoppingCart className="h-4 w-4" /> {adding ? "Added!" : product.requiresVariant ? "Choose variant" : "Add to Cart"}
           </Button>
         </div>
       </div>

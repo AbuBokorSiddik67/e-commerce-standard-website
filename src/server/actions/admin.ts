@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
-import { productSchema, categorySchema, bannerSchema, couponSchema, settingsSchema, homepageSectionSchema } from "@/lib/validations/admin";
+import { productSchema, deliveryZoneSchema, categorySchema, bannerSchema, couponSchema, settingsSchema, homepageSectionSchema } from "@/lib/validations/admin";
 import { createProduct, updateProduct, deleteProduct, bulkUpdateProducts, bulkDeleteProducts } from "@/server/services/product.service";
 import { createCategory, updateCategory, deleteCategory } from "@/server/services/category.service";
 import { createBanner, updateBanner, deleteBanner, createCoupon, updateCoupon, deleteCoupon } from "@/server/services/content.service";
@@ -14,7 +14,7 @@ import { updateOrderStatus, updatePaymentStatus } from "@/server/services/order.
 import { setCustomerBlocked } from "@/server/services/customer.service";
 import { z } from "zod";
 import { actionErrorMessage, friendlyError, logError } from "@/lib/errors";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 
 type ActionResult = { success: boolean; error?: string; id?: string };
 
@@ -38,12 +38,6 @@ function zodError(error: z.ZodError): string {
   return error.issues[0]?.message ?? "Validation failed";
 }
 
-function toDecimalInput(v: FormDataEntryValue | null): number | string | null {
-  if (v === null) return null;
-  const s = String(v).trim();
-  return s === "" ? null : s;
-}
-
 // ---------- Products ----------
 export async function saveProductAction(id: string | null, formData: FormData): Promise<ActionResult> {
   const g = await guard();
@@ -58,6 +52,7 @@ export async function saveProductAction(id: string | null, formData: FormData): 
       categoryIds: JSON.parse((formData.get("categoryIds") as string) || "[]"),
       images: JSON.parse((formData.get("images") as string) || "[]"),
       variants: JSON.parse((formData.get("variants") as string) || "[]"),
+      originalVariantIds: id ? formData.getAll("originalVariantIds") : undefined,
     });
     if (!parsed.success) return { success: false, error: zodError(parsed.error) };
 
@@ -182,6 +177,8 @@ export async function saveCouponAction(id: string | null, formData: FormData): P
   const parsed = couponSchema.safeParse({
     ...Object.fromEntries(formData),
     isActive: formData.get("isActive") === "true",
+    productIds: formData.getAll("productIds"),
+    categoryIds: formData.getAll("categoryIds"),
   });
   if (!parsed.success) return { success: false, error: zodError(parsed.error) };
   try {
@@ -246,7 +243,7 @@ export async function saveSettingsAction(formData: FormData): Promise<ActionResu
       termsConditions: d.termsConditions || null,
       shippingPolicy: d.shippingPolicy || null,
       codEnabled: d.codEnabled,
-      minOrderValue: d.minOrderValue ? ({ toString: () => String(d.minOrderValue) } as unknown as Prisma.Decimal) : null,
+      minOrderValue: typeof d.minOrderValue === "number" ? new Prisma.Decimal(d.minOrderValue) : null,
       socialShareImage: d.socialShareImage || null,
     });
     revalidatePath("/", "layout");
@@ -259,14 +256,14 @@ export async function saveSettingsAction(formData: FormData): Promise<ActionResu
 export async function saveDeliveryZoneAction(id: string | null, formData: FormData): Promise<ActionResult> {
   const g = await guard();
   if (!g.ok) return { success: false, error: g.error };
-  const name = formData.get("name") as string;
-  const charge = Number(formData.get("charge"));
-  const estimatedDays = (formData.get("estimatedDays") as string) || "";
-  const isActive = formData.get("isActive") === "true";
-  if (!name || isNaN(charge) || charge < 0) return { success: false, error: "Invalid zone data" };
+  const parsed = deliveryZoneSchema.safeParse({
+    name: formData.get("name"), charge: formData.get("charge"), estimatedDays: formData.get("estimatedDays") ?? "",
+    isActive: formData.get("isActive") === "true", districts: [...new Set(formData.getAll("districts"))],
+  });
+  if (!parsed.success) return { success: false, error: zodError(parsed.error) };
   try {
-    if (id) await updateDeliveryZone(id, { name, charge, estimatedDays, isActive });
-    else await createDeliveryZone({ name, charge, estimatedDays, isActive });
+    if (id) await updateDeliveryZone(id, parsed.data);
+    else await createDeliveryZone(parsed.data);
     revalidatePath("/admin/settings");
     revalidatePath("/checkout");
     return { success: true };
@@ -358,7 +355,10 @@ export async function updateOrderStatusAction(id: string, status: string, cancel
   const g = await guard();
   if (!g.ok) return { success: false, error: g.error };
   try {
-    await updateOrderStatus(id, status, g.userId, undefined, cancelReason);
+    const parsed = z.object({ id: z.string().min(1).max(100), status: z.enum(["CONFIRMED", "PACKED", "SHIPPED", "DELIVERED", "RETURNED", "CANCELLED"]), cancelReason: z.string().trim().max(500).optional() }).parse({ id, status, cancelReason });
+    await updateOrderStatus(parsed.id, parsed.status, g.userId, parsed.cancelReason);
+    revalidatePath("/products");
+    revalidatePath("/");
     revalidatePath("/admin/orders");
     revalidatePath(`/admin/orders/${id}`);
     return { success: true };
@@ -371,12 +371,13 @@ export async function updatePaymentStatusAction(id: string, paymentStatus: strin
   const g = await guard();
   if (!g.ok) return { success: false, error: g.error };
   try {
-    await updatePaymentStatus(id, paymentStatus, g.userId);
+    const parsed = z.object({ id: z.string().min(1).max(100), paymentStatus: z.enum(["PAID", "PENDING", "REFUNDED"]) }).parse({ id, paymentStatus });
+    await updatePaymentStatus(parsed.id, parsed.paymentStatus, g.userId);
     revalidatePath("/admin/orders");
     revalidatePath(`/admin/orders/${id}`);
     return { success: true };
-  } catch {
-    return { success: false, error: "Failed to update payment status" };
+  } catch (e) {
+    return { success: false, error: actionErrorMessage("admin.payment", e, "Failed to update payment status") };
   }
 }
 

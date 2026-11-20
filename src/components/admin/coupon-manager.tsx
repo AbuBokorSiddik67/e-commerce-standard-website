@@ -18,6 +18,8 @@ import {
 import { Plus, Pencil, Trash2, Loader2, Ticket } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
+type ScopeOptions = { products: { id: string; name: string }[]; categories: { id: string; name: string }[] };
+
 type Coupon = {
   id: string;
   code: string;
@@ -28,9 +30,11 @@ type Coupon = {
   usedCount: number;
   expiresAt: string | null;
   isActive: boolean;
+  productIds: string[];
+  categoryIds: string[];
 };
 
-function CouponFormFields({ coupon, onDone }: { coupon?: Coupon | null; onDone: () => void }) {
+function CouponFormFields({ coupon, onDone, products, categories }: ScopeOptions & { coupon?: Coupon | null; onDone: () => void }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [code, setCode] = useState(coupon?.code ?? "");
@@ -43,7 +47,7 @@ function CouponFormFields({ coupon, onDone }: { coupon?: Coupon | null; onDone: 
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
-    const fd = new FormData();
+    const fd = new FormData(e.currentTarget as HTMLFormElement);
     fd.set("code", code.toUpperCase());
     fd.set("type", type);
     fd.set("value", value);
@@ -91,6 +95,16 @@ function CouponFormFields({ coupon, onDone }: { coupon?: Coupon | null; onDone: 
         <Label>Expiry Date</Label>
         <Input type="date" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} />
       </div>
+      <p className="text-sm text-muted-foreground">Leave both lists empty for a storewide coupon. Otherwise a line is eligible if it matches a selected product or category.</p>
+      {([ ["productIds", "Eligible products", products], ["categoryIds", "Eligible categories", categories] ] as const).map(([key, label, options]) => (
+        <div className="space-y-1" key={key}>
+          <Label htmlFor={key}>{label}</Label>
+          <select id={key} name={key} multiple className="w-full rounded-md border bg-background p-2 text-sm" size={4} defaultValue={coupon?.[key] ?? []}>
+            {options.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
+            {coupon?.[key].filter((id) => !options.some((option) => option.id === id)).map((id) => <option key={id} value={id}>Removed selection (deselect to save)</option>)}
+          </select>
+        </div>
+      ))}
       <div className="flex items-center justify-between">
         <Label>Active</Label>
         <Switch checked={isActive} onCheckedChange={setIsActive} />
@@ -103,7 +117,7 @@ function CouponFormFields({ coupon, onDone }: { coupon?: Coupon | null; onDone: 
   );
 }
 
-export function CouponManager({ coupons }: { coupons: Coupon[] }) {
+export function CouponManager({ coupons, products, categories }: ScopeOptions & { coupons: Coupon[] }) {
   const [editing, setEditing] = useState<Coupon | null>(null);
   const [open, setOpen] = useState(false);
   const router = useRouter();
@@ -116,9 +130,9 @@ export function CouponManager({ coupons }: { coupons: Coupon[] }) {
           <DialogTrigger asChild>
             <Button onClick={() => setEditing(null)}><Plus className="h-4 w-4" /> Add Coupon</Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="max-h-[90dvh] overflow-y-auto">
             <DialogHeader><DialogTitle>{editing ? "Edit Coupon" : "New Coupon"}</DialogTitle></DialogHeader>
-            <CouponFormFields coupon={editing} onDone={() => { setOpen(false); setEditing(null); }} />
+            <CouponFormFields products={products} categories={categories} coupon={editing} onDone={() => { setOpen(false); setEditing(null); }} />
           </DialogContent>
         </Dialog>
       </div>
@@ -172,7 +186,7 @@ export function CouponManager({ coupons }: { coupons: Coupon[] }) {
                             <AlertDialogContent>
                               <AlertDialogHeader>
                                 <AlertDialogTitle>Delete coupon &quot;{c.code}&quot;?</AlertDialogTitle>
-                                <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
+                                <AlertDialogDescription>The code can be reactivated later. Usage history is retained.</AlertDialogDescription>
                               </AlertDialogHeader>
                               <AlertDialogFooter>
                                 <AlertDialogCancel>Cancel</AlertDialogCancel>

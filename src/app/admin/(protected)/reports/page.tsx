@@ -1,6 +1,7 @@
+import { bangladeshDate, reportDates } from "@/lib/report-dates";
 import { requireAdmin } from "@/lib/auth-guard";
 import { getReportData } from "@/server/services/reports.service";
-import { formatCurrency, formatDate, toValidDate } from "@/lib/utils";
+import { formatCurrency } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,21 +19,8 @@ export default async function AdminReportsPage({
   const params = await searchParams;
 
   const now = new Date();
-  const to = toValidDate(params.to, now);
-  let from = toValidDate(
-    params.from,
-    new Date(to.getTime() - 30 * 24 * 60 * 60 * 1000),
-  );
-  // Guard against reversed ranges (e.g. ?from=2026-01-01&to=2020-01-01).
-  if (from.getTime() > to.getTime()) {
-    from = new Date(to.getTime() - 30 * 24 * 60 * 60 * 1000);
-  }
-  to.setHours(23, 59, 59, 999);
-  from.setHours(0, 0, 0, 0);
-
-  const reportResult = await attempt("admin.reports", () =>
-    getReportData({ dateFrom: from, dateTo: to }),
-  );
+  const { fromDate: fromISO, toDate: toISO, dateFrom, dateTo } = reportDates(params.from, params.to, now);
+  const reportResult = await attempt("admin.reports", () => getReportData({ dateFrom, dateTo }));
 
   if (!reportResult.ok) {
     return (
@@ -45,14 +33,12 @@ export default async function AdminReportsPage({
   }
 
   const data = reportResult.value;
-  const fromISO = from.toISOString().slice(0, 10);
-  const toISO = to.toISOString().slice(0, 10);
 
   const ranges = [
     { label: "Today", days: 0 },
-    { label: "Last 7 days", days: 7 },
-    { label: "Last 30 days", days: 30 },
-    { label: "Last 90 days", days: 90 },
+    { label: "Last 7 days", days: 6 },
+    { label: "Last 30 days", days: 29 },
+    { label: "Last 90 days", days: 89 },
   ];
 
   return (
@@ -61,7 +47,7 @@ export default async function AdminReportsPage({
         <div>
           <h1 className="text-2xl font-semibold">Reports</h1>
           <p className="text-sm text-muted-foreground">
-            {formatDate(from)} — {formatDate(to)}
+            {fromISO} — {toISO} (Bangladesh time)
           </p>
         </div>
         <Button variant="outline" asChild>
@@ -71,11 +57,8 @@ export default async function AdminReportsPage({
 
       <div className="flex flex-wrap gap-2">
         {ranges.map((r) => {
-          const d = new Date();
-          d.setHours(0, 0, 0, 0);
-          d.setDate(d.getDate() - r.days);
-          const dISO = d.toISOString().slice(0, 10);
-          const todayISO = new Date().toISOString().slice(0, 10);
+          const dISO = bangladeshDate(new Date(now.getTime() - r.days * 86_400_000));
+          const todayISO = bangladeshDate(now);
           return (
             <Link key={r.label} href={`/admin/reports?from=${dISO}&to=${todayISO}`}>
               <Button variant="outline" size="sm">{r.label}</Button>
@@ -98,11 +81,19 @@ export default async function AdminReportsPage({
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Revenue</CardTitle></CardHeader>
-          <CardContent><p className="text-2xl font-semibold">{formatCurrency(data.revenue)}</p></CardContent>
+          <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Order Value</CardTitle></CardHeader>
+          <CardContent><p className="text-2xl font-semibold">{formatCurrency(data.orderValue)}</p></CardContent>
         </Card>
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Estimated Profit</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Pending COD</CardTitle></CardHeader>
+          <CardContent><p className="text-2xl font-semibold">{formatCurrency(data.pendingCod)}</p></CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Collected COD</CardTitle></CardHeader>
+          <CardContent><p className="text-2xl font-semibold">{formatCurrency(data.collectedCod)}</p></CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Estimated Item Margin</CardTitle></CardHeader>
           <CardContent><p className="text-2xl font-semibold text-green-600">{formatCurrency(data.profit)}</p></CardContent>
         </Card>
         <Card>
@@ -113,11 +104,13 @@ export default async function AdminReportsPage({
           <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Avg Order Value</CardTitle></CardHeader>
           <CardContent>
             <p className="text-2xl font-semibold">
-              {formatCurrency(data.totalOrders > 0 ? data.revenue / data.totalOrders : 0)}
+              {formatCurrency(data.totalOrders > 0 ? data.orderValue / data.totalOrders : 0)}
             </p>
           </CardContent>
         </Card>
       </div>
+
+      <p className="text-sm text-muted-foreground">Figures use the order placement date and current status. Collected COD is recorded paid on delivered orders, including delivered returns until a refund is recorded. It is not a settlement total. Item margin excludes coupons, delivery and expenses.</p>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
@@ -142,16 +135,16 @@ export default async function AdminReportsPage({
               {data.bestSelling.slice(0, 5).map((p) => (
                 <li key={p.id} className="flex items-center justify-between text-sm">
                   <span className="truncate">{p.name}</span>
-                  <span className="ml-2 whitespace-nowrap text-muted-foreground">{p.qty} sold · {formatCurrency(p.revenue)}</span>
+                  <span className="ml-2 whitespace-nowrap text-muted-foreground">{p.qty} ordered · {formatCurrency(p.itemValue)}</span>
                 </li>
               ))}
-              {data.bestSelling.length === 0 && <p className="text-sm text-muted-foreground">No sales yet</p>}
+              {data.bestSelling.length === 0 && <p className="text-sm text-muted-foreground">No order items yet</p>}
             </ul>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader><CardTitle className="text-base">Low Stock Products</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base">Low Stock SKUs</CardTitle></CardHeader>
           <CardContent>
             <ul className="space-y-2">
               {data.lowStock.slice(0, 5).map((p) => (
@@ -172,7 +165,7 @@ export default async function AdminReportsPage({
               {data.topCustomers.map((c) => (
                 <li key={c.id ?? "guest"} className="flex items-center justify-between text-sm">
                   <span className="truncate">{c.name} ({c.phone})</span>
-                  <span className="ml-2 whitespace-nowrap text-muted-foreground">{c.orderCount} orders · {formatCurrency(c.totalSpent)}</span>
+                  <span className="ml-2 whitespace-nowrap text-muted-foreground">{c.orderCount} orders · {formatCurrency(c.orderValue)}</span>
                 </li>
               ))}
               {data.topCustomers.length === 0 && <p className="text-sm text-muted-foreground">No customers yet</p>}
@@ -181,16 +174,16 @@ export default async function AdminReportsPage({
         </Card>
 
         <Card className="lg:col-span-2">
-          <CardHeader><CardTitle className="text-base">Sales by Category</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base">Order Item Value by Category</CardTitle></CardHeader>
           <CardContent>
             <ul className="space-y-2">
               {data.categorySales.map((c) => (
                 <li key={c.id} className="flex items-center justify-between text-sm">
                   <span>{c.name}</span>
-                  <span className="text-muted-foreground">{formatCurrency(c.revenue)}</span>
+                  <span className="text-muted-foreground">{formatCurrency(c.itemValue)}</span>
                 </li>
               ))}
-              {data.categorySales.length === 0 && <p className="text-sm text-muted-foreground">No sales yet</p>}
+              {data.categorySales.length === 0 && <p className="text-sm text-muted-foreground">No order items yet</p>}
             </ul>
           </CardContent>
         </Card>

@@ -21,6 +21,8 @@ export const useCartStore = create<CartState>()(
       couponCode: null,
       addItem: (item) =>
         set((state) => {
+          const maxStock = Math.max(0, Math.min(100, item.maxStock));
+          if (maxStock === 0 || !Number.isInteger(item.quantity) || item.quantity < 1) return state;
           const existing = state.items.find(
             (i) => i.productId === item.productId && i.variantId === item.variantId,
           );
@@ -28,12 +30,12 @@ export const useCartStore = create<CartState>()(
             return {
               items: state.items.map((i) =>
                 i.productId === item.productId && i.variantId === item.variantId
-                  ? { ...i, quantity: Math.min(i.quantity + item.quantity, item.maxStock) }
+                  ? { ...item, maxStock, quantity: Math.min(i.quantity + item.quantity, maxStock) }
                   : i,
               ),
             };
           }
-          return { items: [...state.items, item] };
+          return { items: [...state.items, { ...item, maxStock, quantity: Math.min(item.quantity, maxStock) }] };
         }),
       removeItem: (productId, variantId) =>
         set((state) => ({
@@ -46,7 +48,7 @@ export const useCartStore = create<CartState>()(
           items: state.items
             .map((i) =>
               i.productId === productId && i.variantId === variantId
-                ? { ...i, quantity: Math.max(1, Math.min(quantity, i.maxStock)) }
+                ? { ...i, quantity: Math.max(1, Math.min(Math.trunc(quantity), i.maxStock, 100)) }
                 : i,
             )
             .filter((i) => i.quantity > 0),

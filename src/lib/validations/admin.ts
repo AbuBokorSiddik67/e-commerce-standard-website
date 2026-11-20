@@ -1,15 +1,21 @@
 import { z } from "zod";
+import { BANGLADESH_DISTRICTS } from "@/lib/constants";
+
+const money = z.coerce.number<string | number>().min(0).max(99999999.99).multipleOf(0.01);
+const stockCount = z.coerce.number().int().min(0).max(2_147_483_647);
 
 export const productSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters").max(200),
   slug: z.string().min(2).max(200).optional().or(z.literal("")),
   shortDesc: z.string().max(300).optional().or(z.literal("")),
   description: z.string().optional().or(z.literal("")),
-  price: z.coerce.number().min(0, "Price must be 0 or positive"),
+  price: money,
   compareAtPrice: z.coerce.number().min(0).optional().or(z.literal("")).nullable(),
   costPrice: z.coerce.number().min(0).optional().or(z.literal("")).nullable(),
   sku: z.string().max(100).optional().or(z.literal("")),
-  stock: z.coerce.number().int().min(0, "Stock cannot be negative"),
+  stock: stockCount,
+  originalStock: stockCount.optional(),
+  originalVariantIds: z.array(z.string().min(1).max(100)).max(100).optional(),
   lowStockThreshold: z.coerce.number().int().min(0).default(5),
   isFeatured: z.boolean().default(false),
   isActive: z.boolean().default(true),
@@ -19,12 +25,14 @@ export const productSchema = z.object({
   categoryIds: z.array(z.string()).default([]),
   images: z.array(z.object({ url: z.string().url(), altText: z.string().optional().or(z.literal("")) })).default([]),
   variants: z.array(z.object({
-    name: z.string().min(1),
-    value: z.string().min(1),
+    id: z.string().min(1).max(100).optional(),
+    originalStock: stockCount.optional(),
+    name: z.string().trim().min(1).max(100),
+    value: z.string().trim().min(1).max(100),
     sku: z.string().optional().or(z.literal("")),
-    price: z.coerce.number().min(0).optional().or(z.literal("")).nullable(),
-    stock: z.coerce.number().int().min(0).default(0),
-  })).default([]),
+    price: z.literal("").or(money).optional().nullable(),
+    stock: stockCount.default(0),
+  })).max(100).default([]),
 });
 
 export const categorySchema = z.object({
@@ -52,14 +60,16 @@ export const bannerSchema = z.object({
 });
 
 export const couponSchema = z.object({
-  code: z.string().min(2, "Code must be at least 2 characters").max(50).toUpperCase(),
+  code: z.string().trim().min(2).max(50).toUpperCase(),
   type: z.enum(["PERCENTAGE", "FIXED"]),
-  value: z.coerce.number().min(0, "Value must be positive"),
-  minOrderAmount: z.coerce.number().min(0).optional().or(z.literal("")).nullable(),
-  usageLimit: z.coerce.number().int().min(1).optional().or(z.literal("")).nullable(),
-  expiresAt: z.string().optional().or(z.literal("")).nullable(),
+  value: money.refine((value) => value > 0, "Value must be positive"),
+  minOrderAmount: z.literal("").or(money).optional().nullable(),
+  usageLimit: z.literal("").or(z.coerce.number().int().min(1).max(2_147_483_647)).optional().nullable(),
+  expiresAt: z.iso.date().or(z.literal("")).optional().nullable(),
   isActive: z.boolean().default(true),
-});
+  productIds: z.array(z.string().min(1).max(100)).max(100).default([]),
+  categoryIds: z.array(z.string().min(1).max(100)).max(100).default([]),
+}).refine((input) => input.type !== "PERCENTAGE" || input.value <= 100, "Percentage discounts cannot exceed 100%");
 
 export const settingsSchema = z.object({
   storeName: z.string().min(1, "Store name is required").max(100),
@@ -87,15 +97,16 @@ export const settingsSchema = z.object({
   termsConditions: z.string().optional().or(z.literal("")),
   shippingPolicy: z.string().optional().or(z.literal("")),
   codEnabled: z.boolean().default(true),
-  minOrderValue: z.coerce.number().min(0).optional().or(z.literal("")).nullable(),
+  minOrderValue: z.literal("").or(money).optional().nullable(),
   socialShareImage: z.string().url().optional().or(z.literal("")).nullable(),
 });
 
 export const deliveryZoneSchema = z.object({
-  name: z.string().min(1, "Zone name is required").max(100),
-  charge: z.coerce.number().min(0, "Charge must be positive"),
-  estimatedDays: z.string().max(50).optional().or(z.literal("")),
-  isActive: z.boolean().default(true),
+  name: z.string().trim().min(1, "Zone name is required").max(100),
+  charge: z.union([z.number(), z.string().trim().min(1)]).pipe(money),
+  estimatedDays: z.string().trim().max(50).optional(),
+  isActive: z.boolean(),
+  districts: z.array(z.enum(BANGLADESH_DISTRICTS)).min(1, "Select or enter at least one district").max(64),
 });
 
 export const homepageSectionSchema = z.object({

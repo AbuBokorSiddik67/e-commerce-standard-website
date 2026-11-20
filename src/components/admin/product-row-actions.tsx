@@ -25,14 +25,14 @@ export function ProductRowActions({ id }: { id: string }) {
       </Button>
       <AlertDialog>
         <AlertDialogTrigger asChild>
-          <Button variant="ghost" size="icon" className="text-destructive" aria-label="Delete product">
+          <Button variant="ghost" size="icon" className="text-destructive" aria-label="Archive product">
             <Trash2 className="h-4 w-4" />
           </Button>
         </AlertDialogTrigger>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete this product?</AlertDialogTitle>
-            <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
+            <AlertDialogTitle>Archive this product?</AlertDialogTitle>
+            <AlertDialogDescription>It will be hidden from the storefront and can be reactivated from the product editor.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
@@ -43,15 +43,15 @@ export function ProductRowActions({ id }: { id: string }) {
                 start(async () => {
                   const res = await deleteProductAction(id);
                   if (res.success) {
-                    toast.success("Product deleted");
+                    toast.success("Product archived");
                     router.refresh();
                   } else {
-                    toast.error(res.error ?? "Failed to delete");
+                    toast.error(res.error ?? "Failed to archive");
                   }
                 });
               }}
             >
-              {pending && <Loader2 className="h-4 w-4 animate-spin" />} Delete
+              {pending && <Loader2 className="h-4 w-4 animate-spin" />} Archive
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

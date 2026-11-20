@@ -3,6 +3,8 @@ import CheckoutClient from "@/components/customer/checkout-client";
 import { AppError } from "@/components/shared/app-error";
 import { attempt } from "@/lib/errors";
 
+export const dynamic = "force-dynamic";
+
 export default async function CheckoutPage() {
   const [zonesResult, settings] = await Promise.all([
     attempt("checkout.zones", getDeliveryZones),
@@ -25,8 +27,7 @@ export default async function CheckoutPage() {
     charge: z.charge.toString(),
     estimatedDays: z.estimatedDays,
     isActive: z.isActive,
+    districts: z.districts,
   }));
-  const minOrder = settings.minOrderValue ? Number(settings.minOrderValue) : null;
-
-  return <CheckoutClient zones={safeZones} minOrderValue={minOrder} />;
+  return <CheckoutClient zones={safeZones} codEnabled={settings.codEnabled} />;
 }

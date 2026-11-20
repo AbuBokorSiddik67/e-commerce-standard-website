@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { getOrdersForExport } from "@/server/services/reports.service";
 import { logError } from "@/lib/errors";
-import { toValidDate } from "@/lib/utils";
+import { bangladeshDate, reportDates } from "@/lib/report-dates";
 
 function escapeCsv(value: string): string {
   if (/[",\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
@@ -17,25 +17,14 @@ export async function GET(req: Request) {
     }
 
     const { searchParams } = new URL(req.url);
-    const now = new Date();
-    const to = toValidDate(searchParams.get("to"), now);
-    let from = toValidDate(
-      searchParams.get("from"),
-      new Date(to.getTime() - 30 * 24 * 60 * 60 * 1000),
-    );
-    if (from.getTime() > to.getTime()) {
-      from = new Date(to.getTime() - 30 * 24 * 60 * 60 * 1000);
-    }
-    to.setHours(23, 59, 59, 999);
-    from.setHours(0, 0, 0, 0);
-
-    const orders = await getOrdersForExport({ dateFrom: from, dateTo: to });
+    const { fromDate, toDate, dateFrom, dateTo } = reportDates(searchParams.get("from"), searchParams.get("to"));
+    const orders = await getOrdersForExport({ dateFrom, dateTo });
 
     const rows = [
       ["Order Number", "Date", "Customer", "Phone", "District", "City", "Items", "Subtotal", "Discount", "Delivery", "Total", "Status", "Payment"],
       ...orders.map((o) => [
         o.orderNumber,
-        o.placedAt.toISOString().slice(0, 10),
+        bangladeshDate(o.placedAt),
         o.fullName,
         o.phone,
         o.district,
@@ -55,7 +44,7 @@ export async function GET(req: Request) {
     return new NextResponse(csv, {
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": `attachment; filename="orders-${from.toISOString().slice(0, 10)}-to-${to.toISOString().slice(0, 10)}.csv"`,
+        "Content-Disposition": `attachment; filename="orders-${fromDate}-to-${toDate}.csv"`,
       },
     });
   } catch (error) {

@@ -1,3 +1,4 @@
+import { catalogAvailability, type CatalogInventory } from "@/lib/product-availability";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { ProductCard } from "@/components/customer/product-card";
@@ -8,7 +9,7 @@ export function ProductGridSection({
   section, products, settings, viewAllHref, viewAllText,
 }: {
   section: SafeHomepageSection;
-  products: (Product & { images: { url: string }[] })[] | undefined;
+  products: (Product & CatalogInventory & { images: { url: string }[] })[] | undefined;
   settings: StoreSettings;
   viewAllHref?: string;
   viewAllText?: string;
@@ -36,11 +37,10 @@ export function ProductGridSection({
               id: p.id,
               name: p.name,
               slug: p.slug,
-              price: p.price.toString(),
+              ...catalogAvailability(p),
               compareAtPrice: p.compareAtPrice?.toString() ?? null,
               images: p.images,
-              stock: p.stock,
-              isActive: p.isActive,
+                            isActive: p.isActive,
             }}
             currencySymbol={settings.currencySymbol}
           />
