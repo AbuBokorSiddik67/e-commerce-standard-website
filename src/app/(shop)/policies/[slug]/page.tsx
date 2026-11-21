@@ -1,57 +1,31 @@
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { getStoreSettings } from "@/server/repositories/settings.repo";
 import { POLICY_PAGES } from "@/config/site";
-import type { Metadata } from "next";
+import { excerpt, mediaUrl, noIndex, publicMetadata } from "@/lib/seo";
+import { Breadcrumbs } from "@/components/shared/page-heading";
 
-const POLICY_MAP: Record<string, { title: string; content: string | null }> = {
-  return: { title: "Return Policy", content: "" },
-  privacy: { title: "Privacy Policy", content: "" },
-  terms: { title: "Terms & Conditions", content: "" },
-  shipping: { title: "Shipping Policy", content: "" },
-};
+const legacy: Readonly<Record<string, string>> = { return: 'return-policy', privacy: 'privacy-policy', terms: 'terms-conditions', shipping: 'shipping-policy' };
+const findPolicy = (slug: string) => POLICY_PAGES.find(p => p.slug === slug);
 
-export async function generateMetadata({
-  params,
-}: {
-  params: Promise<{ slug: string }>;
-}): Promise<Metadata> {
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const policy = POLICY_MAP[slug];
-  if (!policy) return { title: "Policy not found" };
-  return { title: policy.title };
+  const policy = findPolicy(slug);
+  if (!policy) return { title: 'Store policy', robots: noIndex };
+  const settings = await getStoreSettings();
+  const description = excerpt(settings[policy.field]);
+  return publicMetadata({ title: policy.label, description, path: `/policies/${policy.slug}`, store: settings.storeName,
+    image: mediaUrl(settings.socialShareImage), index: Boolean(description) });
 }
 
-export default async function PolicyPage({
-  params,
-}: {
-  params: Promise<{ slug: string }>;
-}) {
+export default async function PolicyPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const settings = await getStoreSettings();
-
-  const map: Record<string, { title: string; content: string | null }> = {
-    return: { title: "Return Policy", content: settings.returnPolicy },
-    privacy: { title: "Privacy Policy", content: settings.privacyPolicy },
-    terms: { title: "Terms & Conditions", content: settings.termsConditions },
-    shipping: { title: "Shipping Policy", content: settings.shippingPolicy },
-  };
-
-  const policy = map[slug];
+  if (Object.hasOwn(legacy, slug)) permanentRedirect(`/policies/${legacy[slug]}`);
+  const policy = findPolicy(slug);
   if (!policy) notFound();
-
-  return (
-    <div className="container-page py-12">
-      <div className="mx-auto max-w-3xl">
-        <h1 className="text-3xl font-bold">{policy.title}</h1>
-        {policy.content ? (
-          <div className="mt-6 whitespace-pre-line text-muted-foreground">{policy.content}</div>
-        ) : (
-          <div className="mt-6 rounded-lg border p-6 text-center text-muted-foreground">
-            <p>This policy has not been configured yet.</p>
-            <p className="mt-1 text-sm">Please contact us for more information.</p>
-          </div>
-        )}
-      </div>
-    </div>
-  );
+  const content = (await getStoreSettings())[policy.field];
+  return <div className="container-page py-12"><div className="mx-auto max-w-3xl">
+    <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: policy.label }]} />
+    <h1 className="page-title">{policy.label}</h1>
+    {content ? <div className="mt-6 whitespace-pre-line text-muted-foreground">{content}</div> : <p className="surface mt-6 p-6 text-muted-foreground">This policy has not been configured yet. Please contact us for more information.</p>}
+  </div></div>;
 }

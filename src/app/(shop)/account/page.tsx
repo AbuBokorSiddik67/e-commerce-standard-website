@@ -1,7 +1,7 @@
 import { ChangePasswordForm } from "@/components/shared/change-password-form";
 import Link from "next/link";
 import { requireCustomer } from "@/lib/auth-guard";
-import { getAccountContext, listCustomerOrders, listCustomerAddresses, listWishlist } from "@/server/services/account.service";
+import { getAccountContext, getCustomerSummary } from "@/server/services/account.service";
 import { ProfileForm } from "@/components/customer/profile-form";
 import { Card, CardContent } from "@/components/ui/card";
 import { AppError } from "@/components/shared/app-error";
@@ -12,14 +12,11 @@ export const dynamic = "force-dynamic";
 
 export default async function AccountOverviewPage() {
   const session = await requireCustomer();
-  const [contextResult, ordersResult, addressesResult, wishlistResult] = await Promise.all([
-    attempt("account.context", () => getAccountContext(session.user.id)),
-    attempt("account.orders", () => listCustomerOrders(session.user.id)),
-    attempt("account.addresses", () => listCustomerAddresses(session.user.id)),
-    attempt("account.wishlist", () => listWishlist(session.user.id)),
+  const [contextResult, summaryResult] = await Promise.all([
+    attempt('account.context', () => getAccountContext(session.user.id)),
+    attempt('account.summary', () => getCustomerSummary(session.user.id)),
   ]);
-
-  if (!contextResult.ok || !ordersResult.ok || !addressesResult.ok || !wishlistResult.ok) {
+  if (!contextResult.ok || !summaryResult.ok) {
     return (
       <AppError
         title="We couldn't load your account"
@@ -29,19 +26,12 @@ export default async function AccountOverviewPage() {
   }
 
   const context = contextResult.value;
-  const orders = ordersResult.value;
-  const addresses = addressesResult.value;
-  const wishlist = wishlistResult.value;
-
-  const totalSpent = orders
-    .filter((o) => o.status !== "CANCELLED" && o.status !== "RETURNED")
-    .reduce((sum, o) => sum + Number(o.total), 0);
-
+  const summary = summaryResult.value;
   const stats = [
-    { label: "Orders", value: orders.length, href: "/account/orders" },
-    { label: "Saved addresses", value: addresses.length, href: "/account/addresses" },
-    { label: "Wishlist items", value: wishlist.length, href: "/account/wishlist" },
-    { label: "Total spent", value: formatCurrency(totalSpent), href: "/account/orders" },
+    { label: 'Orders', value: summary.orders, href: '/account/orders' },
+    { label: 'Saved addresses', value: summary.addresses, href: '/account/addresses' },
+    { label: 'Wishlist items', value: summary.wishlist, href: '/account/wishlist' },
+    { label: 'Order value', value: formatCurrency(summary.value), href: '/account/orders' },
   ];
 
   return (

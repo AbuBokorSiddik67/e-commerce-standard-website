@@ -1,0 +1,302 @@
+{
+  "runs": {
+    "home": [
+      {
+        "ttfb": 74.20000000001164,
+        "fcp": 280,
+        "lcp": 388,
+        "cls": 0,
+        "js": 205554,
+        "images": 43996,
+        "html": 17195,
+        "requests": 42
+      },
+      {
+        "ttfb": 62.10000000000582,
+        "fcp": 252,
+        "lcp": 252,
+        "cls": 0,
+        "js": 205554,
+        "images": 43996,
+        "html": 17190,
+        "requests": 42
+      },
+      {
+        "ttfb": 52.79999999998836,
+        "fcp": 216,
+        "lcp": 216,
+        "cls": 0,
+        "js": 205554,
+        "images": 43996,
+        "html": 17190,
+        "requests": 42
+      }
+    ],
+    "catalog": [
+      {
+        "ttfb": 37.79999999998836,
+        "fcp": 140,
+        "lcp": 476,
+        "cls": 0,
+        "js": 202368,
+        "images": 28398,
+        "html": 14002,
+        "requests": 46
+      },
+      {
+        "ttfb": 38,
+        "fcp": 156,
+        "lcp": 516,
+        "cls": 0,
+        "js": 202368,
+        "images": 28398,
+        "html": 14002,
+        "requests": 46
+      },
+      {
+        "ttfb": 46.79999999998836,
+        "fcp": 136,
+        "lcp": 236,
+        "cls": 0,
+        "js": 202368,
+        "images": 28398,
+        "html": 14002,
+        "requests": 46
+      }
+    ],
+    "product": [
+      {
+        "ttfb": 32.5,
+        "fcp": 188,
+        "lcp": 188,
+        "cls": 0,
+        "js": 204562,
+        "images": 25426,
+        "html": 11306,
+        "requests": 37
+      },
+      {
+        "ttfb": 36.70000000001164,
+        "fcp": 272,
+        "lcp": 272,
+        "cls": 0,
+        "js": 204562,
+        "images": 25426,
+        "html": 11306,
+        "requests": 37
+      },
+      {
+        "ttfb": 34.5,
+        "fcp": 184,
+        "lcp": 184,
+        "cls": 0,
+        "js": 204562,
+        "images": 25426,
+        "html": 11306,
+        "requests": 37
+      }
+    ],
+    "cart": [
+      {
+        "ttfb": 12.799999999988358,
+        "fcp": 120,
+        "lcp": 120,
+        "cls": 0.11109260812673248,
+        "js": 191754,
+        "images": 1012,
+        "html": 6980,
+        "requests": 36
+      },
+      {
+        "ttfb": 11.800000000017462,
+        "fcp": 104,
+        "lcp": 104,
+        "cls": 0.11109260812673248,
+        "js": 191754,
+        "images": 1012,
+        "html": 6980,
+        "requests": 36
+      },
+      {
+        "ttfb": 10.300000000017462,
+        "fcp": 88,
+        "lcp": 88,
+        "cls": 0.11109260812673248,
+        "js": 191754,
+        "images": 1012,
+        "html": 6980,
+        "requests": 36
+      }
+    ],
+    "checkout": [
+      {
+        "ttfb": 33.80000000001746,
+        "fcp": 184,
+        "lcp": 368,
+        "cls": 0.5201494368258367,
+        "js": 198662,
+        "images": 0,
+        "html": 7949,
+        "requests": 31
+      },
+      {
+        "ttfb": 29.70000000001164,
+        "fcp": 196,
+        "lcp": 328,
+        "cls": 0.5201494368258367,
+        "js": 198662,
+        "images": 0,
+        "html": 7946,
+        "requests": 31
+      },
+      {
+        "ttfb": 24.89999999999418,
+        "fcp": 148,
+        "lcp": 324,
+        "cls": 0.5201494368258367,
+        "js": 198662,
+        "images": 0,
+        "html": 7946,
+        "requests": 31
+      }
+    ],
+    "account": [
+      {
+        "ttfb": 47.19999999998254,
+        "fcp": 180,
+        "lcp": 180,
+        "cls": 0,
+        "js": 197310,
+        "images": 0,
+        "html": 8733,
+        "requests": 35
+      },
+      {
+        "ttfb": 42.80000000001746,
+        "fcp": 224,
+        "lcp": 224,
+        "cls": 0,
+        "js": 197310,
+        "images": 0,
+        "html": 8733,
+        "requests": 35
+      },
+      {
+        "ttfb": 60.5,
+        "fcp": 208,
+        "lcp": 208,
+        "cls": 0,
+        "js": 197310,
+        "images": 0,
+        "html": 8733,
+        "requests": 35
+      }
+    ],
+    "admin": [
+      {
+        "ttfb": 104.79999999998836,
+        "fcp": 316,
+        "lcp": 316,
+        "cls": 0,
+        "js": 189269,
+        "images": 0,
+        "html": 9412,
+        "requests": 22
+      },
+      {
+        "ttfb": 67.89999999999418,
+        "fcp": 264,
+        "lcp": 264,
+        "cls": 0,
+        "js": 189269,
+        "images": 0,
+        "html": 9412,
+        "requests": 22
+      },
+      {
+        "ttfb": 50.5,
+        "fcp": 216,
+        "lcp": 216,
+        "cls": 0,
+        "js": 189269,
+        "images": 0,
+        "html": 9412,
+        "requests": 22
+      }
+    ]
+  },
+  "api": {
+    "/api/auth/session": [
+      {
+        "ms": 41.83748399998876,
+        "status": 200
+      },
+      {
+        "ms": 16.661770000006072,
+        "status": 200
+      },
+      {
+        "ms": 17.305899999992107,
+        "status": 200
+      }
+    ],
+    "/robots.txt": [
+      {
+        "ms": 14.557162000011886,
+        "status": 200
+      },
+      {
+        "ms": 9.671853000007104,
+        "status": 200
+      },
+      {
+        "ms": 15.574225000003935,
+        "status": 200
+      }
+    ],
+    "/sitemap.xml": [
+      {
+        "ms": 23.783514000009745,
+        "status": 200
+      },
+      {
+        "ms": 8.491269999998622,
+        "status": 200
+      },
+      {
+        "ms": 9.950699000008171,
+        "status": 200
+      }
+    ]
+  },
+  "lighthouse": {
+    "home": {
+      "scores": {
+        "performance": 0.7,
+        "accessibility": 1,
+        "seo": 1
+      },
+      "metrics": {
+        "first-contentful-paint": 1143.932,
+        "largest-contentful-paint": 4465.381,
+        "cumulative-layout-shift": 0,
+        "total-blocking-time": 572.5170000000012,
+        "speed-index": 1172.5951047819376
+      }
+    },
+    "product": {
+      "scores": {
+        "performance": 0.82,
+        "accessibility": 0.95,
+        "seo": 0.92
+      },
+      "metrics": {
+        "first-contentful-paint": 784.3733,
+        "largest-contentful-paint": 3793.8065500000002,
+        "cumulative-layout-shift": 0,
+        "total-blocking-time": 326,
+        "speed-index": 939.0245019999829
+      }
+    }
+  }
+}

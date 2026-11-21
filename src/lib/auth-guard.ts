@@ -1,9 +1,11 @@
+import { cache } from "react";
 import { auth } from "@/lib/auth";
 import { logError } from "@/lib/errors";
 import { redirect } from "next/navigation";
 import type { Role } from "@prisma/client";
 
-async function getSessionSafely() {
+// React cache is scoped to a render request, never shared across users or requests.
+const getSessionSafely = cache(async () => {
   try {
     return await auth();
   } catch (error) {
@@ -12,7 +14,7 @@ async function getSessionSafely() {
     logError("authGuard.session", error);
     return null;
   }
-}
+});
 
 export async function requireAdmin() {
   const session = await getSessionSafely();

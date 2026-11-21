@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { auth } from "@/lib/auth";
+import { getOptionalSession } from "@/lib/auth-guard";
 import { attempt } from "@/lib/errors";
 import { isWishlisted } from "@/server/services/account.service";
 
@@ -7,10 +7,10 @@ import { isWishlisted } from "@/server/services/account.service";
 export async function catalogDisplay(ids: string[]) {
   const [ratings, wishlist] = await Promise.all([
     attempt("catalog.approvedRatings", async () => ids.length ? prisma.review.groupBy({
-      by: ["productId"], where: { productId: { in: ids }, isApproved: true }, _avg: { rating: true }, _count: { rating: true },
+      by: ["productId"], where: { productId: { in: ids }, isApproved: true, rating: { gte: 1, lte: 5 } }, _avg: { rating: true }, _count: { rating: true },
     }) : []),
     attempt("catalog.wishlist", async () => {
-      const session = ids.length ? await auth() : null;
+      const session = ids.length ? await getOptionalSession() : null;
       return session?.user.role === "CUSTOMER" ? isWishlisted(session.user.id, ids) : new Set<string>();
     }),
   ]);

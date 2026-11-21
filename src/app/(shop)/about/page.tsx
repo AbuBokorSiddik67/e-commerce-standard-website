@@ -1,5 +1,11 @@
+import { publicMetadata, mediaUrl } from "@/lib/seo";
 import { getStoreSettings } from "@/server/repositories/settings.repo";
 import { Truck, ShieldCheck, RotateCcw, HeadphonesIcon, Users, Target, Heart } from "lucide-react";
+
+export async function generateMetadata() {
+  const settings = await getStoreSettings();
+  return publicMetadata({ title: "About us", description: `Learn about ${settings.storeName} and how to get help with shopping and delivery.`, path: "/about", store: settings.storeName, image: mediaUrl(settings.socialShareImage) });
+}
 
 export default async function AboutPage() {
   const settings = await getStoreSettings();
@@ -15,8 +21,8 @@ export default async function AboutPage() {
         <div className="mt-10 grid gap-6 sm:grid-cols-3">
           <div className="rounded-lg border p-6 text-center">
             <Users className="mx-auto h-10 w-10 text-primary" />
-            <h3 className="mt-3 font-semibold">10,000+ Customers</h3>
-            <p className="mt-1 text-sm text-muted-foreground">Trusted by thousands across the country</p>
+            <h3 className="mt-3 font-semibold">Customer Support</h3>
+            <p className="mt-1 text-sm text-muted-foreground">Reach out any time you need help with your purchase.</p>
           </div>
           <div className="rounded-lg border p-6 text-center">
             <Target className="mx-auto h-10 w-10 text-primary" />

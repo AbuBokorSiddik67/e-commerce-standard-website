@@ -5,7 +5,7 @@ import { PageHeading } from "@/components/shared/page-heading";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Truck, ShieldCheck, Loader2 } from "lucide-react";
-import { useCartStore } from "@/hooks/use-cart";
+import { useCartStore, useCartHydrated } from "@/hooks/use-cart";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { placeOrderAction, quoteCheckoutAction } from "@/server/actions/customer";
 import { BANGLADESH_DISTRICTS } from "@/lib/constants";
+import { CART_VIEWPORT, CartLoading } from "./cart-loading";
 import type { SafeDeliveryZone } from "@/types/domain";
 
 type Quote = Extract<Awaited<ReturnType<typeof quoteCheckoutAction>>, { success: true }>["quote"];
@@ -25,6 +26,7 @@ async function intentHash(input: unknown) {
 }
 
 export default function CheckoutClient({ zones, codEnabled, currency }: { zones: SafeDeliveryZone[]; codEnabled: boolean; currency: string }) {
+  const hydrated = useCartHydrated();
   const items = useCartStore((s) => s.items);
   const clearCart = useCartStore((s) => s.clearCart);
   const couponCode = useCartStore((s) => s.couponCode);
@@ -104,19 +106,14 @@ export default function CheckoutClient({ zones, codEnabled, currency }: { zones:
     });
   }
 
-  if (items.length === 0) {
-    return (
-      <div className="container-page flex flex-col items-center py-20 text-center">
-        <h1 className="text-2xl font-bold">Your cart is empty</h1>
-        <p className="mt-2 text-muted-foreground">Add items before checking out.</p>
-        <Button asChild className="mt-6"><Link href="/products">Browse Products</Link></Button>
-      </div>
-    );
-  }
-
   return (
-    <div className="container-page py-8">
+    <div className={`container-page py-8 ${CART_VIEWPORT}`}>
       <PageHeading label="Your order · Delivery and payment" title="Checkout" description="Enter your delivery details, then review the total before placing your order." />
+      {!hydrated ? <CartLoading label="Loading checkout" /> : items.length === 0 ? <div className="surface flex flex-col items-center p-8 text-center sm:py-16">
+        <h2 className="text-2xl font-bold">Your cart is empty</h2>
+        <p className="mt-2 text-muted-foreground">Add items before checking out.</p>
+        <Button asChild className="mt-6"><Link href="/products">Browse products</Link></Button>
+      </div> :
       <form onSubmit={handleSubmit} onChange={() => setDisplayQuote(undefined)} className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_22rem] lg:gap-8">
         <div className="min-w-0 space-y-4">
           <div className="surface space-y-4 p-4 sm:p-6">
@@ -214,7 +211,7 @@ export default function CheckoutClient({ zones, codEnabled, currency }: { zones:
             </div>
           </div>
         </div>
-      </form>
+      </form>}
     </div>
   );
 }

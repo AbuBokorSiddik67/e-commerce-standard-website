@@ -116,7 +116,7 @@ export async function getHomepageData() {
   const sections = await getHomepageSections().then((s) => s.filter((x) => x.isActive));
 
   const data: Record<string, unknown> = {};
-  for (const section of sections) {
+  await Promise.all(sections.map(async section => {
     // A single broken section must never take down the entire homepage.
     try {
       const settings = section.settings ?? {};
@@ -132,21 +132,21 @@ export async function getHomepageData() {
                 include: { _count: { select: { products: true } } },
               }).then((r) => r.sort((a, b) => categoryIds.indexOf(a.id) - categoryIds.indexOf(b.id)))
             : await getHomeCategories(limit);
-          data[section.sectionKey] = cats;
+          data[section.id] = cats;
           break;
         }
         case "NEW_ARRIVALS":
-          data[section.sectionKey] = productIds.length
+          data[section.id] = productIds.length
             ? await getProductsByIds(productIds)
             : await getNewArrivals(limit);
           break;
         case "BEST_SELLERS":
-          data[section.sectionKey] = productIds.length
+          data[section.id] = productIds.length
             ? await getProductsByIds(productIds)
             : await getBestSellers(limit);
           break;
         case "FEATURED_COLLECTION":
-          data[section.sectionKey] = productIds.length
+          data[section.id] = productIds.length
             ? await getProductsByIds(productIds)
             : await getFeaturedProducts(limit);
           break;
@@ -155,14 +155,14 @@ export async function getHomepageData() {
             getActiveBanners("home_hero"),
             getActiveBanners("home_side"),
           ]);
-          data[section.sectionKey] = {
+          data[section.id] = {
             slides,
             side: side.slice(0, 2),
           };
           break;
         }
         case "OFFER_BANNER":
-          data[section.sectionKey] = await getActiveBanners("home_mid");
+          data[section.id] = await getActiveBanners("home_mid");
           break;
         case "REVIEWS": {
           const reviewIds = Array.isArray(settings.reviewIds)
@@ -172,16 +172,16 @@ export async function getHomepageData() {
             ? await prisma.review
                 .findMany({
                   where: { id: { in: reviewIds }, isApproved: true },
-                  include: { product: { include: { images: { orderBy: { sortOrder: "asc" } } } } },
+
                 })
                 .then((r) => r.sort((a, b) => reviewIds.indexOf(a.id) - reviewIds.indexOf(b.id)))
             : await prisma.review.findMany({
                 where: { isApproved: true, isFeatured: true },
-                include: { product: { include: { images: { orderBy: { sortOrder: "asc" } } } } },
+
                 orderBy: { createdAt: "desc" },
                 take: limit,
               });
-          data[section.sectionKey] = reviews;
+          data[section.id] = reviews;
           break;
         }
         default:
@@ -189,8 +189,8 @@ export async function getHomepageData() {
       }
     } catch (error) {
       logError("homepage.section", error);
-      data[section.sectionKey] = [];
+      data[section.id] = [];
     }
-  }
+  }));
   return { sections, data };
 }

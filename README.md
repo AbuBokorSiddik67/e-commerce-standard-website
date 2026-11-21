@@ -56,7 +56,7 @@ Production-ready Cash on Delivery (COD) e-commerce storefront and admin dashboar
    - `DIRECT_URL` — direct database connection for migrations (if using Neon).
    - `AUTH_SECRET` — generate with `openssl rand -base64 32`.
    - `AUTH_URL` — e.g. `http://localhost:3000`; use the canonical HTTPS origin in production. Set `AUTH_TRUST_HOST=true` behind a trusted ingress.
-   - Optional: `NEXT_PUBLIC_APP_URL` for canonical URLs/sitemap.
+   - Set `NEXT_PUBLIC_APP_URL` to the public HTTPS origin for canonical URLs, social metadata and the sitemap (no path or query). `AUTH_URL` is the fallback when `NEXT_PUBLIC_APP_URL` is unset.
    - `UPLOADTHING_TOKEN` for production uploads; see `.env.example` for recovery email and additional image hosts.
 
 3. Generate Prisma client and apply migrations:

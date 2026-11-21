@@ -6,14 +6,17 @@ import Link from "next/link";
 import Image from "next/image";
 import { Minus, Plus, Trash2, ShoppingBag, ArrowRight, Tag } from "lucide-react";
 import { useState } from "react";
-import { useCartStore, useCartSubtotal } from "@/hooks/use-cart";
+import { useCartStore, useCartSubtotal, useCartHydrated } from "@/hooks/use-cart";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { applyCouponAction } from "@/server/actions/customer";
 
+import { CART_VIEWPORT, CartLoading } from "@/components/customer/cart-loading";
+
 export default function CartPage() {
   const currency = useStoreSettings()?.currencySymbol as string | undefined ?? "৳";
+  const hydrated = useCartHydrated();
   const items = useCartStore((s) => s.items);
   const updateQuantity = useCartStore((s) => s.updateQuantity);
   const removeItem = useCartStore((s) => s.removeItem);
@@ -47,19 +50,17 @@ export default function CartPage() {
     finally { setLoading(false); }
   }
 
-  if (items.length === 0) {
-    return <div className="container-page py-7 sm:py-10"><PageHeading label="Your bag" title="Shopping cart" /><EmptyState icon={ShoppingBag} title="Your cart is empty" description="Browse the catalog and add something you like." href="/products" action="Continue shopping" /></div>;
-  }
-
   return (
-    <div className="container-page py-8">
+    <div className={`container-page py-8 ${CART_VIEWPORT}`}>
       <PageHeading label="Your bag" title="Shopping cart" description="Review your items before choosing delivery at checkout." />
+      {!hydrated ? <CartLoading label="Loading cart" /> : items.length === 0 ?
+        <EmptyState icon={ShoppingBag} title="Your cart is empty" description="Browse the catalog and add something you like." href="/products" action="Continue shopping" /> :
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_22rem] lg:gap-8">
         <div className="min-w-0 space-y-3">
           {items.map((item) => (
             <div key={`${item.productId}-${item.variantId ?? ""}`} className="surface flex flex-wrap items-start gap-3 p-3 sm:flex-nowrap sm:gap-4 sm:p-4">
               <div className="relative size-16 sm:size-24 shrink-0 overflow-hidden rounded-md bg-muted">
-                {item.image && <Image src={item.image} alt={item.name} fill className="object-cover" sizes="96px" />}
+                {item.image && <Image src={item.image} alt={item.name} fill className="object-cover" sizes="(max-width: 639px) 64px, 96px" />}
               </div>
               <div className="flex min-w-0 flex-1 flex-col gap-1">
                 <Link href={`/product/${item.slug}`} className="font-medium hover:text-primary">{item.name}</Link>
@@ -101,7 +102,7 @@ export default function CartPage() {
             <Button asChild variant="outline" className="w-full"><Link href="/products">Continue Shopping</Link></Button>
           </div>
         </div>
-      </div>
+      </div>}
     </div>
   );
 }

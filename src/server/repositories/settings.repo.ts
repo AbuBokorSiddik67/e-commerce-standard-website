@@ -1,3 +1,6 @@
+import { cache } from "react";
+import { unstable_cache } from "next/cache";
+import { STORE_SETTINGS_TAG } from "@/lib/public-cache-tags";
 import { audit } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_STORE_SETTINGS } from "@/config/site";
@@ -143,33 +146,22 @@ function defaultPublicSettings(): PublicStoreSettings {
   return defaultSettingsCache;
 }
 
-export async function getStoreSettings(): Promise<PublicStoreSettings> {
-  try {
-    const row = await prisma.storeSetting.findUnique({ where: { id: 1 } });
-    if (row) return toPublic(row);
+async function readPublicSettings() {
+  const row = await prisma.storeSetting.findUnique({ where: { id: 1 } });
+  return row ? toPublic(row) : defaultPublicSettings();
+}
 
-    // First run: create the singleton settings row with safe defaults. If a
-    // concurrent request beats us to it, fall back to reading the row again.
-    try {
-      const created = await prisma.storeSetting.create({
-        data: { id: 1, ...DEFAULT_STORE_SETTINGS },
-      });
-      return toPublic(created);
-    } catch (createError) {
-      const retry = await prisma.storeSetting
-        .findUnique({ where: { id: 1 } })
-        .catch(() => null);
-      if (retry) return toPublic(retry);
-      logError("settings.createDefault", createError);
-      return defaultPublicSettings();
-    }
-  } catch (error) {
-    // The storefront layout depends on settings. Never let a database outage
-    // take down every page — render with the bundled defaults instead.
+const readCachedPublicSettings = unstable_cache(readPublicSettings, [STORE_SETTINGS_TAG], { tags: [STORE_SETTINGS_TAG], revalidate: 120 });
+
+// No cookies or customer/admin records in this shared cache. Missing settings
+// use defaults; the authenticated settings save can create the singleton.
+export const getStoreSettings = cache(async (): Promise<PublicStoreSettings> => {
+  try { return await readCachedPublicSettings(); }
+  catch (error) {
     logError("settings.getStoreSettings", error);
     return defaultPublicSettings();
   }
-}
+});
 
 export async function updateStoreSettings(data: Partial<StoreSetting>, adminId: string) {
   return prisma.$transaction(async (tx) => {

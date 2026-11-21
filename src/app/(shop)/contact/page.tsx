@@ -1,5 +1,11 @@
+import { publicMetadata, mediaUrl } from "@/lib/seo";
 import { getStoreSettings } from "@/server/repositories/settings.repo";
 import { ContactClient } from "@/components/customer/contact-client";
+
+export async function generateMetadata() {
+  const settings = await getStoreSettings();
+  return publicMetadata({ title: "Contact us", description: `Contact ${settings.storeName} for help with products, orders or delivery.`, path: "/contact", store: settings.storeName, image: mediaUrl(settings.socialShareImage) });
+}
 
 export default async function ContactPage() {
   const settings = await getStoreSettings();

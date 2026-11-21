@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 import { toFiniteNumber, toPositiveInt } from "@/lib/utils";
 import type { Prisma } from "@prisma/client";
@@ -25,8 +26,9 @@ export async function listProducts(params: {
   const [items, total] = await Promise.all([
     prisma.product.findMany({
       where,
-      include: { images: { orderBy: { sortOrder: "asc" } }, categories: true, _count: { select: { reviews: true } } },
-      orderBy: { createdAt: "desc" },
+      select: { id: true, name: true, sku: true, price: true, stock: true, lowStockThreshold: true, isActive: true, isFeatured: true,
+        images: { orderBy: [{ sortOrder: "asc" }, { id: "asc" }], take: 1, select: { url: true } }, categories: { select: { name: true } } },
+      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
       skip: (page - 1) * perPage,
       take: perPage,
     }),
@@ -42,28 +44,30 @@ export async function getProductById(id: string) {
   });
 }
 
-const variantAvailability = {
+const catalogCard = {
+  id: true, slug: true, name: true, isActive: true, price: true, compareAtPrice: true, stock: true,
+  images: { orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }], take: 1, select: { url: true } },
   variants: { where: { isActive: true }, select: { stock: true, price: true } },
   _count: { select: { variants: true } },
-} satisfies Prisma.ProductInclude;
+} satisfies Prisma.ProductSelect;
 
 export async function getFeaturedProducts(limit = 8) {
   return prisma.product.findMany({
     where: { isFeatured: true, isActive: true },
-    include: { images: { orderBy: { sortOrder: "asc" } }, ...variantAvailability },
-    orderBy: { createdAt: "desc" },
+    select: catalogCard,
+    orderBy: [{ createdAt: "desc" }, { id: "asc" }],
     take: limit,
   });
 }
 
-export async function getNewArrivals(limit = 8) {
+export const getNewArrivals = cache(async (limit = 8) => {
   return prisma.product.findMany({
     where: { isActive: true },
-    include: { images: { orderBy: { sortOrder: "asc" } }, ...variantAvailability },
-    orderBy: { createdAt: "desc" },
+    select: catalogCard,
+    orderBy: [{ createdAt: "desc" }, { id: "asc" }],
     take: limit,
   });
-}
+});
 
 export async function getBestSellers(limit = 8) {
   const best = await prisma.orderItem.groupBy({
@@ -77,7 +81,7 @@ export async function getBestSellers(limit = 8) {
   const ids = best.map((b) => b.productId).filter((id): id is string => !!id);
   const items = await prisma.product.findMany({
     where: { id: { in: ids }, isActive: true },
-    include: { images: { orderBy: { sortOrder: "asc" } }, ...variantAvailability },
+    select: catalogCard,
   });
   items.sort((a, b) => ids.indexOf(a.id) - ids.indexOf(b.id));
   return items;
@@ -90,8 +94,8 @@ export async function getRelatedProducts(productId: string, categoryIds: string[
       id: { not: productId },
       categories: categoryIds.length ? { some: { id: { in: categoryIds } } } : undefined,
     },
-    include: { images: { orderBy: { sortOrder: "asc" } }, ...variantAvailability },
-    orderBy: { createdAt: "desc" },
+    select: catalogCard,
+    orderBy: [{ createdAt: "desc" }, { id: "asc" }],
     take: limit,
   });
 }
@@ -100,7 +104,7 @@ export async function getProductsByIds(ids: string[]) {
   if (!ids.length) return [];
   const products = await prisma.product.findMany({
     where: { id: { in: ids }, isActive: true },
-    include: { images: { orderBy: { sortOrder: "asc" } }, ...variantAvailability },
+    select: catalogCard,
   });
   return products.sort((a, b) => ids.indexOf(a.id) - ids.indexOf(b.id));
 }
@@ -149,8 +153,8 @@ export async function storefrontListProducts(params: {
   const [items, total] = await Promise.all([
     prisma.product.findMany({
       where,
-      include: { images: { orderBy: { sortOrder: "asc" } }, ...variantAvailability },
-      orderBy,
+      select: catalogCard,
+      orderBy: [orderBy, { id: params.sort === "price_high" ? "desc" : "asc" }],
       skip: (page - 1) * perPage,
       take: perPage,
     }),

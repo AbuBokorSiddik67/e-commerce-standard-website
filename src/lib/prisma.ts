@@ -32,4 +32,5 @@ function createPrismaClient() {
 
 export const prisma = globalForPrisma.prisma ?? createPrismaClient();
 
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+// Reuse one adapter pool per process, including separately compiled route modules.
+globalForPrisma.prisma = prisma;
