@@ -13,17 +13,17 @@ jobs:
       postgres:
         image: postgres:16
         env:
-          POSTGRES_DB: shopbd_security_test
+          POSTGRES_DB: shopbd_release_source
           POSTGRES_USER: shopbd_ci
           POSTGRES_PASSWORD: disposable-ci-only
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U shopbd_ci -d shopbd_security_test"
+          --health-cmd "pg_isready -U shopbd_ci -d shopbd_release_source"
           --health-interval 5s --health-timeout 3s --health-retries 12
     env:
-      DATABASE_URL: postgresql://shopbd_ci:disposable-ci-only@127.0.0.1:5432/shopbd_security_test
-      DIRECT_URL: postgresql://shopbd_ci:disposable-ci-only@127.0.0.1:5432/shopbd_security_test
+      DATABASE_URL: postgresql://shopbd_ci:disposable-ci-only@127.0.0.1:5432/shopbd_release_source
+      DIRECT_URL: postgresql://shopbd_ci:disposable-ci-only@127.0.0.1:5432/shopbd_release_source
       SHOPBD_SECURITY_TEST_DATABASE_URL: postgresql://shopbd_ci:disposable-ci-only@127.0.0.1:5432/shopbd_security_test
       NEXT_TELEMETRY_DISABLED: '1'
       NEXT_PUBLIC_APP_URL: https://shopbd.example.invalid
@@ -37,11 +37,33 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
-      - name: Deploy migrations on disposable service and confirm repeat is a no-op
+      - name: Verify native migration history, no-op deploy, and isolated restore
+        env:
+          PG_CONTAINER: ${{ job.services.postgres.id }}
         run: |
+          set -euo pipefail
+          umask 077
+          work=$(mktemp -d)
+          trap 'rm -rf "$work"' EXIT
           npm run db:deploy
-          npm run db:deploy
+          docker exec -i "$PG_CONTAINER" psql -X -v ON_ERROR_STOP=1 -U shopbd_ci -d shopbd_release_source <<'SQL'
+          INSERT INTO "Product" (id, slug, name, price, stock, "updatedAt")
+          VALUES ('release-verification-fixture', 'release-verification-fixture', 'Synthetic release fixture', 91.25, 7, now());
+          SQL
+          SHOPBD_RELEASE_DB_URL="$DIRECT_URL" node_modules/.bin/tsx scripts/verify-release-db.ts | tee "$work/first.json"
           npx --no-install prisma migrate status
+          npm run db:deploy | tee "$work/deploy.log"
+          grep -F 'No pending migrations to apply' "$work/deploy.log"
+          SHOPBD_RELEASE_DB_URL="$DIRECT_URL" node_modules/.bin/tsx scripts/verify-release-db.ts > "$work/second.json"
+          diff -u "$work/first.json" "$work/second.json"
+
+          docker exec "$PG_CONTAINER" pg_dump -U shopbd_ci -d shopbd_release_source -Fc > "$work/release.dump"
+          (cd "$work"; sha256sum release.dump > release.sha256; sha256sum --check release.sha256)
+          docker exec -i "$PG_CONTAINER" pg_restore --list < "$work/release.dump" > "$work/toc"
+          docker exec "$PG_CONTAINER" createdb -U shopbd_ci shopbd_security_test
+          time docker exec -i "$PG_CONTAINER" pg_restore -U shopbd_ci -d shopbd_security_test --exit-on-error --single-transaction --no-owner --no-privileges < "$work/release.dump"
+          SHOPBD_RELEASE_DB_URL="$SHOPBD_SECURITY_TEST_DATABASE_URL" node_modules/.bin/tsx scripts/verify-release-db.ts | tee "$work/restored.json"
+          diff -u "$work/first.json" "$work/restored.json"
       - run: npm run test:security:db
       - run: npm run test:core:db
       - run: npm run test:auth:db
