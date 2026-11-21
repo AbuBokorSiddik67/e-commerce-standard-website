@@ -1,0 +1,48 @@
+name: Release checks
+on:
+  pull_request:
+    branches: [AI-Agent]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: shopbd_security_test
+          POSTGRES_USER: shopbd_ci
+          POSTGRES_PASSWORD: disposable-ci-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U shopbd_ci -d shopbd_security_test"
+          --health-interval 5s --health-timeout 3s --health-retries 12
+    env:
+      DATABASE_URL: postgresql://shopbd_ci:disposable-ci-only@127.0.0.1:5432/shopbd_security_test
+      DIRECT_URL: postgresql://shopbd_ci:disposable-ci-only@127.0.0.1:5432/shopbd_security_test
+      SHOPBD_SECURITY_TEST_DATABASE_URL: postgresql://shopbd_ci:disposable-ci-only@127.0.0.1:5432/shopbd_security_test
+      NEXT_TELEMETRY_DISABLED: '1'
+      NEXT_PUBLIC_APP_URL: https://shopbd.example.invalid
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - name: Deploy migrations on disposable service and confirm repeat is a no-op
+        run: |
+          npm run db:deploy
+          npm run db:deploy
+          npx --no-install prisma migrate status
+      - run: npm run test:security:db
+      - run: npm run test:core:db
+      - run: npm run test:auth:db
+      - run: npm run build

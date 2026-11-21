@@ -36,7 +36,7 @@ export default async function ContactPage() {
           )}
         </div>
 
-        <ContactClient />
+        {settings.contactEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(settings.contactEmail) && <ContactClient email={settings.contactEmail} />}
       </div>
     </div>
   );

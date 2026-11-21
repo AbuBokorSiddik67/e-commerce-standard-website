@@ -17,5 +17,7 @@ export const authConfig = {
     },
   },
   trustHost: process.env.NODE_ENV !== "production" || process.env.AUTH_TRUST_HOST === "true",
+  // The full Auth.js config emits sanitized categories; the proxy never serializes errors.
+  logger: { error() { console.error("[store:auth.proxy]"); }, warn() {}, debug() {} },
   useSecureCookies: process.env.NODE_ENV === "production" ? true : undefined,
 } satisfies NextAuthConfig;
