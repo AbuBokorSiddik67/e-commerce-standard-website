@@ -1,5 +1,6 @@
 "use client";
 
+import { logClientError } from "@/lib/client-diagnostics";
 import { useEffect } from "react";
 import { toast } from "sonner";
 
@@ -35,13 +36,13 @@ export function GlobalErrorListener() {
 
     function onUnhandledRejection(event: PromiseRejectionEvent) {
       if (isAbortError(event.reason)) return;
-      console.error("[store:client] Unhandled promise rejection", event.reason);
+      logClientError("client.unhandledRejection", event.reason);
       notify();
     }
 
     function onWindowError(event: ErrorEvent) {
       if (BENIGN_ERROR.test(event.message ?? "")) return;
-      console.error("[store:client] Uncaught error", event.error ?? event.message);
+      logClientError("client.uncaughtError", event.error ?? event.message);
       notify();
     }
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { logClientError } from "@/lib/client-diagnostics";
 import { useEffect } from "react";
 import { AppError } from "@/components/shared/app-error";
 
@@ -11,7 +12,7 @@ export default function RootRouteError({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error("[store:root-error]", error);
+    logClientError("root-error", error);
   }, [error]);
 
   return (

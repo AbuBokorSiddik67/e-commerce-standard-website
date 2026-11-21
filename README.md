@@ -1,6 +1,6 @@
 # ShopBD — Next.js E-commerce Store
 
-Production-ready Cash on Delivery (COD) e-commerce storefront and admin dashboard for a small Bangladeshi online store. Built with Next.js App Router, TypeScript, Prisma, PostgreSQL, NextAuth/Auth.js, Tailwind CSS, and shadcn/ui.
+Cash on Delivery (COD) e-commerce storefront and admin dashboard for a small Bangladeshi online store. Built with Next.js App Router, TypeScript, Prisma, PostgreSQL, NextAuth/Auth.js, Tailwind CSS, and shadcn/ui.
 
 ## Features
 
@@ -37,13 +37,13 @@ Production-ready Cash on Delivery (COD) e-commerce storefront and admin dashboar
 - NextAuth/Auth.js (credentials)
 - Zod + React Hook Form
 - Zustand (cart state)
-- UploadThing/Cloudinary-ready image handling
+- UploadThing image storage and Next.js image optimization
 
 ## Local Setup
 
 1. Install dependencies:
    ```bash
-   npm install
+   npm ci
    ```
 
 2. Copy environment variables and fill in the values:
@@ -93,17 +93,9 @@ Production-ready Cash on Delivery (COD) e-commerce storefront and admin dashboar
 | `npm run db:seed` | Seed demo data |
 | `npm run db:studio` | Open Prisma Studio |
 
-## Deployment (Vercel)
+## Release and deployment
 
-1. Push the repository and import it in Vercel.
-2. Add all environment variables from `.env.example`.
-3. Provision a PostgreSQL database (Neon recommended) and run:
-   ```bash
-   npx prisma migrate deploy
-   ```
-4. Build command: `npm run build`.
-5. Do not run the demo seed in deployed environments. It is restricted to opted-in, disposable loopback databases; see `PHASE_3_SECURITY_REPORT.md` for provisioning and rotation.
-6. Add your production domain to `NEXT_PUBLIC_APP_URL` and `AUTH_URL`.
+Use a supported Node.js 22 or 24 LTS release (`.nvmrc` records the tested version). Before deploying, follow the [deployment runbook](PRODUCTION_DEPLOYMENT_GUIDE.md), [environment checklist](PRODUCTION_ENVIRONMENT_CHECKLIST.md), [backup/restore guide](DATABASE_BACKUP_RESTORE_GUIDE.md) and [smoke test checklist](PRODUCTION_SMOKE_TEST_CHECKLIST.md). See the [security audit](PRODUCTION_SECURITY_AUDIT.md) and [Phase 6 report](PHASE_6_PRODUCTION_READINESS_REPORT.md) for release blockers. Do not seed or run development migrations in staging or production.
 
 ## Admin Quick Guide
 

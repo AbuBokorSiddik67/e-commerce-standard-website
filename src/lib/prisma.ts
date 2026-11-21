@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import { databasePoolMax } from "@/lib/production-env";
 import { PrismaPg } from "@prisma/adapter-pg";
 
 const globalForPrisma = globalThis as unknown as {
@@ -21,6 +22,9 @@ function createPrismaClient() {
 
   const adapter = new PrismaPg({
     connectionString: connectionString || UNREACHABLE_DATABASE_URL,
+    max: databasePoolMax(process.env.DB_POOL_MAX),
+    connectionTimeoutMillis: 5_000,
+    idleTimeoutMillis: 30_000,
   });
 
   return new PrismaClient({

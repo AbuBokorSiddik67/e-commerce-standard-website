@@ -1,5 +1,6 @@
 "use client";
 
+import { logClientError } from "@/lib/client-diagnostics";
 import { useEffect } from "react";
 import { AppError } from "@/components/shared/app-error";
 
@@ -11,7 +12,7 @@ export default function AdminProtectedError({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error("[store:admin-protected-error]", error);
+    logClientError("admin-protected-error", error);
   }, [error]);
 
   return <AppError variant="admin" error={error} onRetry={reset} />;
