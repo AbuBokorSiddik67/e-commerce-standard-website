@@ -2,9 +2,13 @@ name: Release checks
 on:
   pull_request:
     branches: [AI-Agent]
+  push:
+    branches: ['arena/**']
   workflow_dispatch:
 permissions:
   contents: read
+env:
+  CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -22,49 +26,146 @@ jobs:
           --health-cmd "pg_isready -U shopbd_ci -d shopbd_release_source"
           --health-interval 5s --health-timeout 3s --health-retries 12
     env:
-      DATABASE_URL: postgresql://shopbd_ci:disposable-ci-only@127.0.0.1:5432/shopbd_release_source
-      DIRECT_URL: postgresql://shopbd_ci:disposable-ci-only@127.0.0.1:5432/shopbd_release_source
-      SHOPBD_SECURITY_TEST_DATABASE_URL: postgresql://shopbd_ci:disposable-ci-only@127.0.0.1:5432/shopbd_security_test
       NEXT_TELEMETRY_DISABLED: '1'
       NEXT_PUBLIC_APP_URL: https://shopbd.example.invalid
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CANDIDATE_SHA }}
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
           cache: npm
+      - name: Record candidate and toolchain
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
+          test "$(node --version)" = "v$(cat .nvmrc)"
+          echo '::add-mask::disposable-ci-only'
+          url=postgresql://shopbd_ci:disposable-ci-only@127.0.0.1:5432
+          printf 'DATABASE_URL=%s/shopbd_release_source\nDIRECT_URL=%s/shopbd_release_source\nSHOPBD_SECURITY_TEST_DATABASE_URL=%s/shopbd_security_test\n' \
+            "$url" "$url" "$url" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/release-evidence"
+          printf 'candidate=%s\nnode=%s\nnpm=%s\n' "$CANDIDATE_SHA" "$(node --version)" "$(npm --version)" \
+            | tee "$RUNNER_TEMP/release-evidence/toolchain.txt"
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
-      - name: Verify native migration history, no-op deploy, and isolated restore
+      - name: Verify native migration history and repeat deploy
         env:
           PG_CONTAINER: ${{ job.services.postgres.id }}
         run: |
           set -euo pipefail
-          umask 077
-          work=$(mktemp -d)
-          trap 'rm -rf "$work"' EXIT
+          evidence="$RUNNER_TEMP/release-evidence"
+          server_num=$(docker exec "$PG_CONTAINER" psql -XAtq -v ON_ERROR_STOP=1 -U shopbd_ci -d shopbd_release_source -c 'SHOW server_version_num')
+          test "$((server_num / 10000))" -eq 16
+          tables=$(docker exec "$PG_CONTAINER" psql -XAtq -v ON_ERROR_STOP=1 -U shopbd_ci -d shopbd_release_source -c "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public'")
+          test "$tables" = 0
           npm run db:deploy
           docker exec -i "$PG_CONTAINER" psql -X -v ON_ERROR_STOP=1 -U shopbd_ci -d shopbd_release_source <<'SQL'
           INSERT INTO "Product" (id, slug, name, price, stock, "updatedAt")
           VALUES ('release-verification-fixture', 'release-verification-fixture', 'Synthetic release fixture', 91.25, 7, now());
           SQL
-          SHOPBD_RELEASE_DB_URL="$DIRECT_URL" node_modules/.bin/tsx scripts/verify-release-db.ts | tee "$work/first.json"
+          SHOPBD_RELEASE_DB_URL="$DIRECT_URL" node_modules/.bin/tsx scripts/verify-release-db.ts | tee "$evidence/source.json"
           npx --no-install prisma migrate status
-          npm run db:deploy | tee "$work/deploy.log"
-          grep -F 'No pending migrations to apply' "$work/deploy.log"
-          SHOPBD_RELEASE_DB_URL="$DIRECT_URL" node_modules/.bin/tsx scripts/verify-release-db.ts > "$work/second.json"
-          diff -u "$work/first.json" "$work/second.json"
-
+          deploy_log=$(mktemp)
+          trap 'rm -f "$deploy_log"' EXIT
+          npm run db:deploy | tee "$deploy_log"
+          grep -Fx 'No pending migrations to apply.' "$deploy_log"
+          SHOPBD_RELEASE_DB_URL="$DIRECT_URL" node_modules/.bin/tsx scripts/verify-release-db.ts > "$evidence/repeat.json"
+          diff -u "$evidence/source.json" "$evidence/repeat.json"
+          prisma_version=$(node -p 'require("prisma/package.json").version')
+          printf 'postgres_version_num=%s\nprisma=%s\nstatus=up-to-date\nrepeat=no pending migrations; unchanged fingerprint\n' \
+            "$server_num" "$prisma_version" | tee "$evidence/native.txt"
+          echo "::notice title=Native migration evidence::candidate=$CANDIDATE_SHA; PostgreSQL=$server_num; Prisma=$prisma_version; migrate status up to date; repeat no-op; $(cat "$evidence/source.json")"
+      - name: Back up and verify native-migrated database on isolated restore
+        env:
+          PG_CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          set -euo pipefail
+          umask 077
+          evidence="$RUNNER_TEMP/release-evidence"
+          work=$(mktemp -d)
+          trap 'rm -rf "$work"' EXIT
+          started=$(date +%s%3N)
           docker exec "$PG_CONTAINER" pg_dump -U shopbd_ci -d shopbd_release_source -Fc > "$work/release.dump"
+          backup_ms=$(( $(date +%s%3N) - started ))
           (cd "$work"; sha256sum release.dump > release.sha256; sha256sum --check release.sha256)
           docker exec -i "$PG_CONTAINER" pg_restore --list < "$work/release.dump" > "$work/toc"
+          grep -E 'TABLE DATA public _prisma_migrations ' "$work/toc"
           docker exec "$PG_CONTAINER" createdb -U shopbd_ci shopbd_security_test
-          time docker exec -i "$PG_CONTAINER" pg_restore -U shopbd_ci -d shopbd_security_test --exit-on-error --single-transaction --no-owner --no-privileges < "$work/release.dump"
-          SHOPBD_RELEASE_DB_URL="$SHOPBD_SECURITY_TEST_DATABASE_URL" node_modules/.bin/tsx scripts/verify-release-db.ts | tee "$work/restored.json"
-          diff -u "$work/first.json" "$work/restored.json"
+          started=$(date +%s%3N)
+          docker exec -i "$PG_CONTAINER" pg_restore -U shopbd_ci -d shopbd_security_test --exit-on-error --single-transaction --no-owner --no-privileges < "$work/release.dump"
+          restore_ms=$(( $(date +%s%3N) - started ))
+          SHOPBD_RELEASE_DB_URL="$SHOPBD_SECURITY_TEST_DATABASE_URL" node_modules/.bin/tsx scripts/verify-release-db.ts | tee "$evidence/restored.json"
+          diff -u "$evidence/source.json" "$evidence/restored.json"
+          DATABASE_URL="$SHOPBD_SECURITY_TEST_DATABASE_URL" DIRECT_URL="$SHOPBD_SECURITY_TEST_DATABASE_URL" npx --no-install prisma migrate status
+          archive_sha=$(cut -d' ' -f1 "$work/release.sha256")
+          archive_bytes=$(stat -c%s "$work/release.dump")
+          printf 'archive_sha256=%s\narchive_bytes=%s\nbackup_ms=%s\nrestore_ms=%s\nchecksum=verified\nhistory_toc=present\nrestore_fingerprint=matches source\n' \
+            "$archive_sha" "$archive_bytes" "$backup_ms" "$restore_ms" | tee "$evidence/restore.txt"
+          echo "::notice title=Native restore evidence::candidate=$CANDIDATE_SHA; backup_ms=$backup_ms; restore_ms=$restore_ms; bytes=$archive_bytes; sha256=$archive_sha checked; restored history, schema and fixture match; migrate status up to date"
       - run: npm run test:security:db
       - run: npm run test:core:db
       - run: npm run test:auth:db
       - run: npm run build
+      - name: Preserve sanitized release evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-evidence-${{ env.CANDIDATE_SHA }}
+          path: ${{ runner.temp }}/release-evidence/
+          retention-days: 14
+          if-no-files-found: error
+
+  audit:
+    name: Audit (${{ matrix.scope }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        scope: [production, full]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CANDIDATE_SHA }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Run mandatory dependency audit
+        env:
+          SCOPE: ${{ matrix.scope }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
+          test "$(node --version)" = "v$(cat .nvmrc)"
+          mkdir -p "$RUNNER_TEMP/audit-evidence"
+          raw=$(mktemp)
+          trap 'rm -f "$raw" "$raw.err"' EXIT
+          args=()
+          if [[ "$SCOPE" == production ]]; then args+=(--omit=dev); fi
+          rc=0
+          npm audit "${args[@]}" --json > "$raw" 2> "$raw.err" || rc=$?
+          printf 'candidate=%s\nscope=%s\nnpm_exit=%s\n' "$CANDIDATE_SHA" "$SCOPE" "$rc" | tee "$RUNNER_TEMP/audit-evidence/run.txt"
+          # Retain all affected package names, severities and known advisory references;
+          # never upload registry error bodies/configuration or arbitrary raw logs.
+          jq -e '{counts: .metadata.vulnerabilities, packages: [(.vulnerabilities // {}) | to_entries[] |
+            {name: .key, severity: .value.severity, via: [.value.via[] | if type == "string" then . else {url, range} end]}]} |
+            select(.counts.total | type == "number")' "$raw" | tee "$RUNNER_TEMP/audit-evidence/findings.json"
+          counts=$(jq -c .counts "$RUNNER_TEMP/audit-evidence/findings.json")
+          echo "::notice title=Dependency audit evidence::candidate=$CANDIDATE_SHA; scope=$SCOPE; npm_exit=$rc; package entries=$counts"
+          if [[ "$rc" -ne 0 ]]; then exit "$rc"; fi
+          jq -e '.counts.total == 0' "$RUNNER_TEMP/audit-evidence/findings.json" > /dev/null
+      - name: Preserve sanitized audit evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-${{ matrix.scope }}-${{ env.CANDIDATE_SHA }}
+          path: ${{ runner.temp }}/audit-evidence/
+          retention-days: 14
+          if-no-files-found: error
