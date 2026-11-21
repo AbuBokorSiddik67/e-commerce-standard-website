@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { requireCustomer } from "@/lib/auth-guard";
-import { listCustomerOrders } from "@/server/services/account.service";
-import { formatCurrency, formatDateTime } from "@/lib/utils";
+import { listCustomerOrders, countCustomerOrders, CUSTOMER_ORDERS_PAGE_SIZE } from "@/server/services/account.service";
+import { Pagination } from "@/components/shared/pagination";
+import { formatCurrency, formatDateTime, toPositiveInt } from "@/lib/utils";
 import { ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS } from "@/lib/constants";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,11 +21,11 @@ const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "
   RETURNED: "outline",
 };
 
-export default async function AccountOrdersPage() {
+export default async function AccountOrdersPage({searchParams}: {searchParams: Promise<{page?: string}>}) {
   const session = await requireCustomer();
-  const ordersResult = await attempt("account.orders", () =>
-    listCustomerOrders(session.user.id),
-  );
+  const input = (await searchParams).page;
+  const page = toPositiveInt(typeof input === "string" ? input : undefined, 1);
+  const ordersResult = await attempt("account.orders", () => Promise.all([listCustomerOrders(session.user.id, page), countCustomerOrders(session.user.id)]));
 
   if (!ordersResult.ok) {
     return (
@@ -35,9 +36,9 @@ export default async function AccountOrdersPage() {
     );
   }
 
-  const orders = ordersResult.value;
+  const [orders, total] = ordersResult.value;
 
-  if (orders.length === 0) {
+  if (total === 0) {
     return (
       <div className="rounded-lg border bg-muted/30 p-8 text-center">
         <p className="text-muted-foreground">You have not placed any orders yet.</p>
@@ -60,7 +61,7 @@ export default async function AccountOrdersPage() {
               </Link>
               <p className="text-xs text-muted-foreground">{formatDateTime(order.placedAt)}</p>
               <p className="mt-1 text-sm text-muted-foreground">
-                {order.items.length} item{order.items.length === 1 ? "" : "s"}
+                {order._count.items} item{order._count.items === 1 ? "" : "s"}
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -80,6 +81,7 @@ export default async function AccountOrdersPage() {
           </div>
         </div>
       ))}
+      <Pagination page={page} pages={Math.ceil(total / CUSTOMER_ORDERS_PAGE_SIZE)} base="/account/orders" label="Order history pages" />
     </div>
   );
 }

@@ -2,18 +2,14 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { Breadcrumbs } from "@/components/shared/page-heading";
 import { toggleWishlistAction } from "@/server/actions/account";
 import { formatCurrency } from "@/lib/utils";
 import { Star, Minus, Plus, ShoppingBag, Truck, ShieldCheck, RotateCcw, Heart } from "lucide-react";
 import { useCartStore } from "@/hooks/use-cart";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { ReviewForm } from "./review-form";
 
 type Variant = { id: string; name: string; value: string; sku: string | null; price: string | null; stock: number };
-type Review = { id: string; customerName: string; city: string | null; rating: number; title: string | null; body: string | null; createdAt: string };
-
 export function ProductDetail({
   product,
   settings,
@@ -23,7 +19,7 @@ export function ProductDetail({
     id: string; name: string; slug: string; shortDesc: string | null; description: string | null;
     requiresVariant: boolean; price: string; compareAtPrice: string | null; sku: string | null; stock: number; weightGrams: number | null;
     images: { id: string; url: string; altText: string | null }[];
-    variants: Variant[]; reviews: Review[]; reviewCount: number;
+    variants: Variant[]; reviewCount: number; averageRating: number;
   };
   settings: { currencySymbol: string };
   initialWishlisted: boolean;
@@ -33,7 +29,6 @@ export function ProductDetail({
   const [activeImage, setActiveImage] = useState(0);
   const [qty, setQty] = useState(1);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
-  const [showReviewForm, setShowReviewForm] = useState(false);
   const addItem = useCartStore((s) => s.addItem);
 
   const variant = product.variants.find((v) => v.id === selectedVariant);
@@ -63,7 +58,7 @@ export function ProductDetail({
     toast.success("Added to cart");
   };
 
-  const avgRating = product.reviews.length ? product.reviews.reduce((sum, review) => sum + review.rating, 0) / product.reviews.length : 0;
+  const avgRating = product.averageRating;
   const money = (amount: string) => formatCurrency(Number(amount), settings.currencySymbol);
   async function wishlist() {
     setSaving(true);
@@ -77,7 +72,6 @@ export function ProductDetail({
   }
   return (
     <div>
-      <Breadcrumbs items={[{label:"Home",href:"/"},{label:"Shop",href:"/products"},{label:product.name}]} />
 
       <div className="grid gap-6 md:grid-cols-2 lg:gap-10">
         <div className="space-y-4">
@@ -88,8 +82,8 @@ export function ProductDetail({
                 alt={product.images[activeImage].altText ?? product.name}
                 fill
                 className="object-cover"
-                sizes="(max-width: 1024px) 100vw, 50vw"
-                priority={activeImage === 0}
+                sizes="(max-width: 639px) calc(100vw - 32px), (max-width: 767px) calc(100vw - 48px), (max-width: 1279px) 47vw, 588px"
+                loading="eager" fetchPriority={activeImage === 0 ? "high" : "auto"}
               />
             ) : (
               <div className="flex h-full items-center justify-center text-muted-foreground">No image</div>
@@ -190,38 +184,6 @@ export function ProductDetail({
         </div>
       </div>
 
-      <section className="surface mt-8 p-4 sm:p-7">
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="section-title">Customer reviews ({product.reviewCount})</h2>
-          <Button variant="outline" size="sm" aria-expanded={showReviewForm} onClick={() => setShowReviewForm((s) => !s)}>
-            Write a Review
-          </Button>
-        </div>
-
-        {showReviewForm && <ReviewForm productId={product.id} onDone={() => setShowReviewForm(false)} />}
-
-        {product.reviews.length === 0 ? (
-          <p className="text-muted-foreground">No reviews yet. Be the first to review!</p>
-        ) : (
-          <div className="space-y-4">
-            {product.reviews.map((r) => (
-              <div key={r.id} className="border-b pb-4">
-                <div className="flex items-center gap-2">
-                  <div className="flex" aria-label={`${r.rating} out of 5 stars`}>
-                    {[1, 2, 3, 4, 5].map((s) => (
-                      <Star key={s} aria-hidden="true" className={`h-4 w-4 ${s <= r.rating ? "fill-yellow-400 text-yellow-400" : "text-muted"}`} />
-                    ))}
-                  </div>
-                  <span className="font-medium">{r.customerName}</span>
-                  {r.city && <span className="text-sm text-muted-foreground">· {r.city}</span>}
-                </div>
-                {r.title && <p className="mt-1 font-medium">{r.title}</p>}
-                {r.body && <p className="mt-1 text-sm text-muted-foreground">{r.body}</p>}
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
     </div>
   );
 }

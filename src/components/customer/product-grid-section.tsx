@@ -1,24 +1,24 @@
 import { catalogAvailability, type CatalogInventory } from "@/lib/product-availability";
-import { catalogDisplay } from "@/server/services/catalog-display";
+import type { catalogDisplay } from "@/server/services/catalog-display";
 import { ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { ProductCard } from "@/components/customer/product-card";
 import type { SafeHomepageSection, StoreSettings } from "@/types/domain";
-import type { Product } from "@prisma/client";
 
 export async function ProductGridSection({
-  section, products, settings, viewAllHref, viewAllText,
+  section, products, settings, viewAllHref, viewAllText, displayPromise,
 }: {
   section: SafeHomepageSection;
-  products: (Product & CatalogInventory & { images: { url: string }[] })[] | undefined;
+  products: (CatalogInventory & { id: string; slug: string; name: string; isActive: boolean; compareAtPrice: { toString(): string } | null; images: { url: string }[] })[] | undefined;
   settings: StoreSettings;
+  displayPromise: ReturnType<typeof catalogDisplay>;
   viewAllHref?: string;
   viewAllText?: string;
 }) {
   if (!products || products.length === 0) return null;
 
-  const display = await catalogDisplay(products.map(p => p.id));
+  const display = await displayPromise;
 
   return (
     <section className="container-page py-7 lg:py-10">

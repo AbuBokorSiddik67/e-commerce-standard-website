@@ -204,6 +204,8 @@ model Product {
   @@index([slug])
   @@index([isActive])
   @@index([isFeatured])
+  @@index([isActive, createdAt(sort: Desc), id], map: "Product_active_created_id_idx")
+  @@index([isActive, price, id], map: "Product_active_price_id_idx")
 }
 
 model ProductImage {
@@ -215,6 +217,7 @@ model ProductImage {
   sortOrder Int     @default(0)
 
   @@index([productId])
+  @@index([productId, sortOrder, id], map: "ProductImage_product_sort_id_idx")
 }
 
 model ProductVariant {
@@ -389,6 +392,7 @@ model Order {
   @@index([phone])
   @@index([placedAt])
   @@index([userId, placedAt])
+  @@index([status, placedAt(sort: Desc)], map: "Order_status_placed_idx")
 }
 
 model OrderItem {
@@ -427,6 +431,7 @@ model Review {
   createdAt   DateTime @default(now())
 
   @@index([productId, isApproved])
+  @@index([productId, isApproved, createdAt(sort: Desc), id(sort: Desc)], map: "Review_product_approved_created_id_idx")
 }
 
 // ---------- Wishlist ----------

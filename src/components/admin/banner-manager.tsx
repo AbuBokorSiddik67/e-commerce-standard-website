@@ -146,7 +146,7 @@ export function BannerManager({ banners }: { banners: Banner[] }) {
           {banners.map((b) => (
             <Card key={b.id} className="overflow-hidden">
               <div className="relative h-36 bg-muted">
-                {b.image && <Image src={b.image} alt={b.title ?? "Banner"} fill className="object-cover" />}
+                {b.image && <Image src={b.image} alt={b.title ?? "Banner"} fill sizes="(max-width: 639px) 100vw, (max-width: 1023px) 50vw, 30vw" className="object-cover" />}
               </div>
               <CardContent className="space-y-2 p-4">
                 <div className="flex items-start justify-between gap-2">

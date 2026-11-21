@@ -9,7 +9,11 @@ const nextConfig: NextConfig = {
     },
   },
   images: {
+    // Never let the shared image cache fetch private application routes.
+    localPatterns: [{ pathname: '/uploads/**', search: '' }, { pathname: '/brand/**', search: '' }],
     remotePatterns: mediaHosts.map((hostname) => ({ protocol: "https", hostname, port: "" })),
+    // Filenames assigned by the uploader are versioned; respect higher upstream TTL.
+    minimumCacheTTL: 14_400,
     maximumRedirects: 0,
     dangerouslyAllowLocalIP: false,
   },
@@ -29,6 +33,20 @@ const nextConfig: NextConfig = {
           },
         ],
       },
+      {
+        source: "/:privatePath(login|register|forgot-password|cart|checkout|track-order)",
+        headers: [
+          { key: "Cache-Control", value: "private, no-store" },
+          { key: "X-Robots-Tag", value: "noindex, follow" },
+        ],
+      },
+      ...["/account/:path*", "/admin/:path*"].map(source => ({
+        source,
+        headers: [
+          { key: "Cache-Control", value: "private, no-store" },
+          { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive" },
+        ],
+      })),
       {
         source: "/reset-password",
         headers: [

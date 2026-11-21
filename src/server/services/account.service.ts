@@ -112,12 +112,29 @@ export async function setDefaultCustomerAddress(userId: string, id: string) {
   ]);
 }
 
-export async function listCustomerOrders(userId: string) {
+export const CUSTOMER_ORDERS_PAGE_SIZE = 20;
+
+export async function listCustomerOrders(userId: string, page = 1) {
   return prisma.order.findMany({
     where: customerOrderOwnership(userId),
-    orderBy: { placedAt: "desc" },
-    include: { items: true },
+    orderBy: [{ placedAt: 'desc' }, { id: 'desc' }],
+    select: { id: true, orderNumber: true, placedAt: true, status: true, paymentStatus: true, total: true, _count: { select: { items: true } } },
+    take: CUSTOMER_ORDERS_PAGE_SIZE, skip: (page - 1) * CUSTOMER_ORDERS_PAGE_SIZE,
   });
+}
+
+export function countCustomerOrders(userId: string) {
+  return prisma.order.count({ where: customerOrderOwnership(userId) });
+}
+
+export async function getCustomerSummary(userId: string) {
+  const [orders, value, addresses, wishlist] = await prisma.$transaction([
+    prisma.order.count({ where: customerOrderOwnership(userId) }),
+    prisma.order.aggregate({ where: { ...customerOrderOwnership(userId), status: { notIn: ['CANCELLED', 'RETURNED'] } }, _sum: { total: true } }),
+    prisma.address.count({ where: { userId } }),
+    prisma.wishlistItem.count({ where: { userId } }),
+  ]);
+  return { orders, value: value._sum.total?.toString() ?? '0', addresses, wishlist };
 }
 
 export async function getCustomerOrder(userId: string, orderNumber: string) {

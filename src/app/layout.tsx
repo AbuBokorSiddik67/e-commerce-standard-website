@@ -5,37 +5,19 @@ import localFont from "next/font/local";
 import { Toaster } from "@/components/ui/sonner";
 import { GlobalErrorListener } from "@/components/shared/global-error-listener";
 import { getStoreSettings } from "@/server/repositories/settings.repo";
-import { DEFAULT_STORE_SETTINGS } from "@/config/site";
+import { siteOrigin } from "@/lib/seo";
 
 const inter = localFont({ src: "./fonts/inter-latin.woff2", weight: "100 900", display: "swap", variable: "--font-inter" });
 
 const bengali = localFont({ src: "./fonts/noto-sans-bengali.woff2", weight: "100 900", display: "swap", variable: "--font-bengali", preload: false });
 
 export async function generateMetadata(): Promise<Metadata> {
-  try {
-    const settings = await getStoreSettings();
-    return {
-      title: {
-        default: settings.storeName,
-        template: `%s | ${settings.storeName}`,
-      },
-      description: settings.footerText ?? "Online store in Bangladesh",
-      icons: settings.faviconUrl ? [{ url: settings.faviconUrl }] : undefined,
-      openGraph: {
-        title: settings.storeName,
-        description: settings.footerText ?? undefined,
-        images: settings.socialShareImage ? [{ url: settings.socialShareImage }] : undefined,
-      },
-    };
-  } catch {
-    return {
-      title: {
-        default: DEFAULT_STORE_SETTINGS.storeName,
-        template: `%s | ${DEFAULT_STORE_SETTINGS.storeName}`,
-      },
-      description: "Online store in Bangladesh",
-    };
-  }
+  const settings = await getStoreSettings();
+  return {
+    metadataBase: siteOrigin(),
+    title: { default: settings.storeName, template: `%s | ${settings.storeName}` },
+    icons: settings.faviconUrl ? [{ url: settings.faviconUrl }] : undefined,
+  };
 }
 
 export default async function RootLayout({

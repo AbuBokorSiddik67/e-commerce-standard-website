@@ -1,5 +1,7 @@
 "use client";
 
+import Image from "next/image";
+import { safeImageUrl } from "@/lib/safe-urls";
 import { useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { X, UploadCloud, Loader2 } from "lucide-react";
@@ -73,13 +75,16 @@ export function ImageUploader({
         <div className="flex flex-wrap gap-2">
           {value.map((url, i) => (
             <div key={url + i} className="group relative h-20 w-20 overflow-hidden rounded-md border">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={url} alt="" className="h-full w-full object-cover" />
+              {safeImageUrl(url) ? <Image src={url} alt="" fill sizes="80px" className="object-cover" /> :
+                // Display-only fallback for old previews; these cannot be newly saved by the media validator.
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={url} loading="lazy" decoding="async" alt="" className="h-full w-full object-cover" />}
+
               <button
                 type="button"
                 onClick={() => onChange(value.filter((_, idx) => idx !== i))}
-                className="absolute right-1 top-1 rounded-full bg-black/70 p-1 text-white opacity-0 transition-opacity group-hover:opacity-100"
-                aria-label="Remove image"
+                className="absolute right-1 top-1 rounded-full bg-black/70 p-1 text-white opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                aria-label={`Remove image ${i + 1}`}
               >
                 <X className="h-3 w-3" />
               </button>

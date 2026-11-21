@@ -1,5 +1,6 @@
 "use client";
 
+import { useSyncExternalStore } from "react";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { CartItem } from "@/types/domain";
@@ -66,4 +67,14 @@ export function useCartCount() {
 
 export function useCartSubtotal() {
   return useCartStore((s) => s.items.reduce((sum, i) => sum + i.price * i.quantity, 0));
+}
+
+const subscribeToBrowser = () => () => {};
+const browserSnapshot = () => true;
+const serverSnapshot = () => false;
+
+// Persistence uses synchronous localStorage. This also resolves when storage
+// is unavailable or corrupted, so the UI can still show and use an empty bag.
+export function useCartHydrated() {
+  return useSyncExternalStore(subscribeToBrowser, browserSnapshot, serverSnapshot);
 }

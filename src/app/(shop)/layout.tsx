@@ -1,5 +1,6 @@
 import { getStoreSettings } from "@/server/repositories/settings.repo";
-import { Header, Footer } from "@/components/customer/header-footer";
+import { Header } from "@/components/customer/header";
+import { Footer } from "@/components/customer/footer";
 import { onHex, readableOnLight } from "@/lib/storefront-colors";
 import type { CSSProperties } from "react";
 import { StoreSettingsProvider } from "@/components/customer/store-settings-provider";

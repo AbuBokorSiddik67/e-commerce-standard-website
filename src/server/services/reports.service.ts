@@ -62,7 +62,7 @@ export async function getReportData(params: { dateFrom: Date; dateTo: Date }) {
 
   const customerIds = topCustomers.map((t) => t.customerId).filter((c): c is string => !!c);
   const customers = customerIds.length
-    ? await prisma.customer.findMany({ where: { id: { in: customerIds } } })
+    ? await prisma.customer.findMany({ where: { id: { in: customerIds } }, select: { id: true, fullName: true, phone: true } })
     : [];
 
   return {

@@ -1,6 +1,7 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { SITEMAP_TAG, PUBLIC_CATEGORIES_TAG, STORE_SETTINGS_TAG } from "@/lib/public-cache-tags";
+import { revalidatePath, updateTag } from "next/cache";
 import { auth } from "@/lib/auth";
 import { productSchema, resourceId, deliveryZoneSchema, categorySchema, bannerSchema, couponSchema, settingsSchema, homepageSectionSchema } from "@/lib/validations/admin";
 import { createProduct, updateProduct, deleteProduct, bulkUpdateProducts, bulkDeleteProducts } from "@/server/services/product.service";
@@ -61,11 +62,13 @@ export async function saveProductAction(id: string | null, formData: FormData): 
 
     if (id) {
       await updateProduct(id, parsed.data, g.userId);
+      updateTag(SITEMAP_TAG);
       revalidatePath("/admin/products");
       revalidatePath("/products");
       return { success: true, id };
     }
     const p = await createProduct(parsed.data, g.userId);
+    updateTag(SITEMAP_TAG);
     revalidatePath("/admin/products");
     revalidatePath("/products");
     return { success: true, id: p.id };
@@ -81,6 +84,7 @@ export async function deleteProductAction(id: string): Promise<ActionResult> {
   if (!resourceId.safeParse(id).success) return { success: false, error: "Invalid resource" };
   try {
     await deleteProduct(id, g.userId);
+    updateTag(SITEMAP_TAG);
     revalidatePath("/admin/products");
     revalidatePath("/products");
     return { success: true };
@@ -100,6 +104,7 @@ export async function bulkProductAction(ids: string[], action: "activate" | "dea
     else if (action === "deactivate") await bulkUpdateProducts(ids, { isActive: false }, g.userId);
     else if (action === "feature") await bulkUpdateProducts(ids, { isFeatured: true }, g.userId);
     else if (action === "unfeature") await bulkUpdateProducts(ids, { isFeatured: false }, g.userId);
+    updateTag(SITEMAP_TAG);
     revalidatePath("/admin/products");
     revalidatePath("/products");
     return { success: true };
@@ -122,6 +127,8 @@ export async function saveCategoryAction(id: string | null, formData: FormData):
   try {
     if (id) await updateCategory(id, parsed.data, g.userId);
     else await createCategory(parsed.data, g.userId);
+    updateTag(PUBLIC_CATEGORIES_TAG);
+    updateTag(SITEMAP_TAG);
     revalidatePath("/admin/categories");
     revalidatePath("/products");
     revalidatePath("/");
@@ -137,6 +144,8 @@ export async function deleteCategoryAction(id: string): Promise<ActionResult> {
   if (!resourceId.safeParse(id).success) return { success: false, error: "Invalid resource" };
   try {
     await deleteCategory(id, g.userId);
+    updateTag(PUBLIC_CATEGORIES_TAG);
+    updateTag(SITEMAP_TAG);
     revalidatePath("/admin/categories");
     revalidatePath("/");
     return { success: true };
@@ -259,6 +268,8 @@ export async function saveSettingsAction(formData: FormData): Promise<ActionResu
       minOrderValue: typeof d.minOrderValue === "number" ? new Prisma.Decimal(d.minOrderValue) : null,
       socialShareImage: d.socialShareImage || null,
     }, g.userId);
+    updateTag(STORE_SETTINGS_TAG);
+    updateTag(SITEMAP_TAG);
     revalidatePath("/", "layout");
     return { success: true };
   } catch (e) {

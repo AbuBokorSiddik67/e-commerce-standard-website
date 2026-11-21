@@ -1,0 +1,302 @@
+{
+  "runs": {
+    "home": [
+      {
+        "ttfb": 78.59999999997672,
+        "fcp": 336,
+        "lcp": 336,
+        "cls": 0,
+        "js": 193171,
+        "images": 35296,
+        "html": 19999,
+        "requests": 33
+      },
+      {
+        "ttfb": 69.40000000002328,
+        "fcp": 308,
+        "lcp": 352,
+        "cls": 0,
+        "js": 193171,
+        "images": 35296,
+        "html": 19999,
+        "requests": 33
+      },
+      {
+        "ttfb": 97.5,
+        "fcp": 308,
+        "lcp": 308,
+        "cls": 0,
+        "js": 193171,
+        "images": 35296,
+        "html": 19999,
+        "requests": 33
+      }
+    ],
+    "catalog": [
+      {
+        "ttfb": 142.09999999997672,
+        "fcp": 304,
+        "lcp": 712,
+        "cls": 0,
+        "js": 191398,
+        "images": 28398,
+        "html": 17631,
+        "requests": 30
+      },
+      {
+        "ttfb": 32.699999999953434,
+        "fcp": 248,
+        "lcp": 316,
+        "cls": 0,
+        "js": 191398,
+        "images": 28398,
+        "html": 17631,
+        "requests": 30
+      },
+      {
+        "ttfb": 66.30000000004657,
+        "fcp": 240,
+        "lcp": 420,
+        "cls": 0,
+        "js": 191398,
+        "images": 28398,
+        "html": 17631,
+        "requests": 30
+      }
+    ],
+    "product": [
+      {
+        "ttfb": 102.60000000009313,
+        "fcp": 312,
+        "lcp": 312,
+        "cls": 0,
+        "js": 193810,
+        "images": 20726,
+        "html": 13708,
+        "requests": 32
+      },
+      {
+        "ttfb": 45.09999999997672,
+        "fcp": 224,
+        "lcp": 224,
+        "cls": 0,
+        "js": 193810,
+        "images": 20726,
+        "html": 13708,
+        "requests": 32
+      },
+      {
+        "ttfb": 39.70000000006985,
+        "fcp": 252,
+        "lcp": 316,
+        "cls": 0,
+        "js": 193810,
+        "images": 20726,
+        "html": 13669,
+        "requests": 32
+      }
+    ],
+    "cart": [
+      {
+        "ttfb": 19.899999999906868,
+        "fcp": 144,
+        "lcp": 144,
+        "cls": 0,
+        "js": 190744,
+        "images": 632,
+        "html": 7337,
+        "requests": 29
+      },
+      {
+        "ttfb": 15.20000000006985,
+        "fcp": 180,
+        "lcp": 180,
+        "cls": 0,
+        "js": 190744,
+        "images": 632,
+        "html": 7337,
+        "requests": 29
+      },
+      {
+        "ttfb": 16,
+        "fcp": 160,
+        "lcp": 160,
+        "cls": 0,
+        "js": 190744,
+        "images": 632,
+        "html": 7337,
+        "requests": 29
+      }
+    ],
+    "checkout": [
+      {
+        "ttfb": 32.60000000009313,
+        "fcp": 140,
+        "lcp": 140,
+        "cls": 0,
+        "js": 188859,
+        "images": 0,
+        "html": 8784,
+        "requests": 21
+      },
+      {
+        "ttfb": 24.5,
+        "fcp": 120,
+        "lcp": 120,
+        "cls": 0,
+        "js": 188859,
+        "images": 0,
+        "html": 8784,
+        "requests": 21
+      },
+      {
+        "ttfb": 28.399999999906868,
+        "fcp": 148,
+        "lcp": 148,
+        "cls": 0,
+        "js": 188859,
+        "images": 0,
+        "html": 8784,
+        "requests": 21
+      }
+    ],
+    "account": [
+      {
+        "ttfb": 41.90000000002328,
+        "fcp": 176,
+        "lcp": 176,
+        "cls": 0,
+        "js": 187532,
+        "images": 0,
+        "html": 9387,
+        "requests": 29
+      },
+      {
+        "ttfb": 31.900000000023283,
+        "fcp": 116,
+        "lcp": 116,
+        "cls": 0,
+        "js": 187532,
+        "images": 0,
+        "html": 9387,
+        "requests": 29
+      },
+      {
+        "ttfb": 32.20000000006985,
+        "fcp": 168,
+        "lcp": 168,
+        "cls": 0,
+        "js": 187532,
+        "images": 0,
+        "html": 9387,
+        "requests": 29
+      }
+    ],
+    "admin": [
+      {
+        "ttfb": 64.80000000004657,
+        "fcp": 188,
+        "lcp": 188,
+        "cls": 0,
+        "js": 189311,
+        "images": 0,
+        "html": 9180,
+        "requests": 22
+      },
+      {
+        "ttfb": 59.5,
+        "fcp": 196,
+        "lcp": 196,
+        "cls": 0,
+        "js": 189311,
+        "images": 0,
+        "html": 9180,
+        "requests": 22
+      },
+      {
+        "ttfb": 37.199999999953434,
+        "fcp": 160,
+        "lcp": 160,
+        "cls": 0,
+        "js": 189311,
+        "images": 0,
+        "html": 9180,
+        "requests": 22
+      }
+    ]
+  },
+  "api": {
+    "/api/auth/session": [
+      {
+        "ms": 28.78089500000351,
+        "status": 200
+      },
+      {
+        "ms": 16.718699000004563,
+        "status": 200
+      },
+      {
+        "ms": 14.989809999999125,
+        "status": 200
+      }
+    ],
+    "/robots.txt": [
+      {
+        "ms": 10.430159999988973,
+        "status": 200
+      },
+      {
+        "ms": 7.898037000006298,
+        "status": 200
+      },
+      {
+        "ms": 6.195179999995162,
+        "status": 200
+      }
+    ],
+    "/sitemap.xml": [
+      {
+        "ms": 29.491284999996424,
+        "status": 200
+      },
+      {
+        "ms": 7.410936999993282,
+        "status": 200
+      },
+      {
+        "ms": 7.809693000002881,
+        "status": 200
+      }
+    ]
+  },
+  "lighthouse": {
+    "home": {
+      "scores": {
+        "performance": 0.83,
+        "accessibility": 1,
+        "seo": 1
+      },
+      "metrics": {
+        "first-contentful-paint": 939.8085,
+        "largest-contentful-paint": 4100.4255,
+        "cumulative-layout-shift": 0,
+        "total-blocking-time": 236.50000000000057,
+        "speed-index": 956.3333616802474
+      }
+    },
+    "product": {
+      "scores": {
+        "performance": 0.92,
+        "accessibility": 0.95,
+        "seo": 1
+      },
+      "metrics": {
+        "first-contentful-paint": 827.7595,
+        "largest-contentful-paint": 2648.7975000000006,
+        "cumulative-layout-shift": 0,
+        "total-blocking-time": 238.5000000000001,
+        "speed-index": 827.7595
+      }
+    }
+  }
+}
